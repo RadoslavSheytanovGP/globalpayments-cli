@@ -11,6 +11,7 @@ import type { EnginePollResult } from '../core/engine.js';
 export interface RunObservation {
   pollCycles: number;
   transactionsObserved: number;
+  /** Records read from `GET /actions` across all cycles; 0 when no case uses that feed. */
   actionsObserved: number;
   timedOut: boolean;
   elapsedMs: number;
