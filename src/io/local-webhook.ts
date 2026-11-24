@@ -5,6 +5,8 @@ import { gunzipSync } from 'node:zlib';
 
 const MAX_WEBHOOK_BYTES = 1_000_000;
 const MAX_RESPONSE_BYTES = 64_000;
+/** Set on every forwarded request so a listener chain that loops back is refused, not amplified. */
+const FORWARDED_HEADER = 'x-globalpayments-cli-forwarded';
 
 export interface LocalWebhookServerOptions {
   forwardTo: URL;
@@ -86,6 +88,7 @@ function forwardableHeaders(headers: IncomingHttpHeaders): Headers {
       output.set(name, value);
     }
   }
+  output.set(FORWARDED_HEADER, '1');
   return output;
 }
 
@@ -128,6 +131,13 @@ async function handleWebhookRequest(
   if (request.method !== 'POST') {
     options.onReject?.(`Rejected ${request.method ?? 'unknown'} request; only POST is supported.`);
     response.writeHead(405, { allow: 'POST' });
+    response.end();
+    return;
+  }
+
+  if (request.headers[FORWARDED_HEADER] !== undefined) {
+    options.onReject?.('Rejected a webhook this CLI had already forwarded; the forward target loops back to a listener.');
+    response.writeHead(508);
     response.end();
     return;
   }

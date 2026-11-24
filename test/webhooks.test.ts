@@ -232,4 +232,41 @@ describe('local webhook tooling', () => {
       await once(blocker, 'close');
     }
   }, 15_000);
+
+  it('refuses to forward a listener to its own port', () => {
+    const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+    const result = spawnSync(
+      process.execPath,
+      ['--import', tsx, path.resolve('src', 'bin.ts'), 'listen', '--forward-to', 'http://localhost:47811/',
+        '--port', '47811', '--timeout', '5s', '--json'],
+      { encoding: 'utf8', timeout: 10_000 }
+    );
+
+    expect(result.status).toBe(EXIT_CODES.USAGE);
+    expect(JSON.parse(result.stdout).error.message).toMatch(/points back at this listener/);
+  }, 15_000);
+
+  it('refuses a request it already forwarded instead of looping', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    const server = createLocalWebhookServer({
+      forwardTo: parseLocalForwardTarget('http://localhost:3000/webhooks'),
+      fetchImpl
+    });
+    const port = await listenOnLoopback(server, 0);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-globalpayments-cli-forwarded': '1' },
+        body: '{}'
+      });
+      expect(response.status).toBe(508);
+      expect(fetchImpl).not.toHaveBeenCalled();
+
+      await fetch(`http://127.0.0.1:${port}/`, { method: 'POST', body: '{}' });
+      expect(new Headers(fetchImpl.mock.calls[0]?.[1]?.headers).get('x-globalpayments-cli-forwarded')).toBe('1');
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
+  });
 });

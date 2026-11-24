@@ -153,6 +153,15 @@ export function registerWebhookCommands(program: Command): void {
           }
           throw error;
         }
+        const forwardPort = Number(forwardTo.port || (forwardTo.protocol === 'https:' ? 443 : 80));
+        if (forwardPort === listeningPort) {
+          server.close();
+          throw new GlobalPaymentsError(
+            ERROR_CODES.E_USAGE,
+            `--forward-to points back at this listener (port ${listeningPort}), so every event would be forwarded to itself.`,
+            { remediation: 'Forward to the port your app listens on, e.g. http://localhost:3000/webhooks, and keep --port different.' }
+          );
+        }
         reportProgress(`Listening on http://127.0.0.1:${listeningPort}; forwarding to ${forwardTo.href}.`);
 
         let stoppedBy = 'signal';
