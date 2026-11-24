@@ -86,4 +86,14 @@ describe('watch frame for the actions feed', () => {
     expect(text).toContain('4 transaction(s) fetched');
     expect(text).not.toMatch(/, \d+ action\(s\)/);
   });
+
+  it('does not offer to diagnose when no case has a diagnosis', () => {
+    const undiagnosed = view({}, 'pending');
+    (undiagnosed.cases[0] as { diagnosis?: unknown }).diagnosis = undefined;
+
+    const commands = buildRunNextActions(undiagnosed).map((a) => a.command);
+
+    expect(commands).not.toContain('globalpayments diagnose --json');
+    expect(JSON.stringify(buildRunNextActions(undiagnosed))).not.toMatch(/all 0 non-passing/);
+  });
 });
