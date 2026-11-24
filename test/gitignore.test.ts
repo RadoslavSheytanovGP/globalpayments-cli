@@ -10,4 +10,13 @@ describe('gitignore setup', () => {
     expect(first).toBe('node_modules/\r\n\r\n.env\r\n.globalpayments/agent/\r\n');
     expect(mergeGitignore(first, ['.env', '.globalpayments/agent/'])).toBe(first);
   });
+
+  it('does not count a directory-only rule or a re-included file as ignoring .env', () => {
+    expect(mergeGitignore('.env/\n', ['.env'])).toBe('.env/\n\n.env\n');
+    expect(mergeGitignore('.env\n!.env\n', ['.env'])).toBe('.env\n!.env\n\n.env\n');
+    expect(mergeGitignore('!.env\n.env\n', ['.env'])).toBe('!.env\n.env\n');
+    expect(mergeGitignore('config/\n', ['config/.env'])).toBe('config/\n');
+    expect(mergeGitignore('/.globalpayments/agent/\n', ['/.globalpayments/agent/'])).toBe('/.globalpayments/agent/\n');
+    expect(mergeGitignore('# .env\n', ['.env'])).toBe('# .env\n\n.env\n');
+  });
 });

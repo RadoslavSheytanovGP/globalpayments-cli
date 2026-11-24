@@ -6,21 +6,33 @@ function normalizedRule(value: string): string {
   return value.trim().replace(/^\/+/, '').replace(/\/+$/, '');
 }
 
-function ruleCovers(entry: string, rule: string): boolean {
+function ruleMatches(entry: string, rule: string): boolean {
+  const pattern = rule.trim().replace(/^!/, '');
   const normalizedEntry = normalizedRule(entry);
-  const normalizedExisting = normalizedRule(rule);
-  if (!normalizedExisting || rule.trim().startsWith('!')) return false;
+  const normalizedPattern = normalizedRule(pattern);
+  if (!normalizedPattern || pattern.startsWith('#')) return false;
+  // A trailing slash matches directories only, so `.env/` never ignores the file `.env`.
+  const sameKind = !pattern.endsWith('/') || entry.trim().endsWith('/');
   return (
-    normalizedEntry === normalizedExisting ||
-    normalizedEntry.startsWith(`${normalizedExisting}/`) ||
-    (!rule.includes('/') && normalizedEntry.split('/').at(-1) === normalizedExisting)
+    (sameKind && normalizedEntry === normalizedPattern) ||
+    normalizedEntry.startsWith(`${normalizedPattern}/`) ||
+    (sameKind && !normalizedPattern.includes('/') && normalizedEntry.split('/').at(-1) === normalizedPattern)
   );
+}
+
+/** Whether the entry ends up ignored, reading rules in order so a later `!rule` re-includes it. */
+function isIgnored(entry: string, lines: string[]): boolean {
+  let ignored = false;
+  for (const line of lines) {
+    if (ruleMatches(entry, line)) ignored = !line.trim().startsWith('!');
+  }
+  return ignored;
 }
 
 export function mergeGitignore(contents: string, entries: string[]): string {
   const newline = contents.includes('\r\n') ? '\r\n' : '\n';
   const lines = contents.split(/\r?\n/);
-  const missing = entries.filter((entry) => !lines.some((line) => ruleCovers(entry, line)));
+  const missing = entries.filter((entry) => !isIgnored(entry, lines));
   if (missing.length === 0) return contents;
 
   let prefix = contents;
