@@ -212,6 +212,8 @@ Configure an existing GP Developer Portal sandbox app. Prompts for the app ID an
 hidden app key, then updates only the GP credential/environment entries in `.env`.
 The app key is not printed, and `.env` is added to `.gitignore` if no matching rule
 already exists. This command does not create an account or portal app.
+If the credentials already in the environment belong to another `GP_API_ENVIRONMENT`,
+it stops instead of saving them as sandbox credentials; rerun with `--replace`.
 
 **Options:**
 - `--env-file <path>` — Env file to create or update (default: `.env`)
@@ -223,7 +225,9 @@ already exists. This command does not create an account or portal app.
 ### `globalpayments api get <path>` / `globalpayments api post <path>`
 Make an authenticated request to a root-relative GP API path. `GET` works in the
 configured environment; `POST` is rejected before sending unless the resolved
-environment is `sandbox`.
+environment is `sandbox`. Requests time out after 30 seconds. If a `POST` times out
+or gets a 5xx, the error has `details.mayHaveBeenProcessed: true`: check the
+transaction before sending it again, because the sandbox may already have applied it.
 
 **Options:**
 - `--data <json>` or `--data-file <path>` — JSON body for `POST` (exactly one required)
@@ -265,7 +269,8 @@ Do not use third-party webhook collectors for sensitive payloads.
 ### `globalpayments logs tail`
 Poll GP `/actions` history for requests rejected with a selected HTTP status class.
 Use `--once` for a snapshot or `--timeout` to bound a live tail. JSON mode requires
-one of those bounds so it returns exactly one envelope.
+one of those bounds so it returns exactly one envelope. While following, a poll that
+fails on the network is reported and the next poll goes ahead.
 
 ```bash
 globalpayments logs tail --status 4xx
@@ -305,7 +310,9 @@ Setup and the launcher read credentials from `.env`; existing process environmen
 variables take precedence. Credentials are not copied into editor settings. Its
 local MCP installation is ignored in `.gitignore`. Requires Git, npm, network access,
 and Node.js 22.20 or newer. The MCP server is built from a pinned official GitHub
-revision. That revision exposes documentation lookup and payment-link creation and
+revision, and the SDK skills are installed with a pinned `skills` CLI from a pinned
+`agent-skills` commit. Installer processes (git, npm, npx) do not receive the GP
+credentials. That revision exposes documentation lookup and payment-link creation and
 retrieval, not generic API requests or transaction lookup. In sandbox mode it
 requests an access token from `https://apis-cert.globalpay.com` and sends payment-link
 requests to `https://apis.sandbox.globalpay.com`.
