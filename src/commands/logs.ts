@@ -103,7 +103,8 @@ async function fetchRecentFailures(
   authInput: Awaited<ReturnType<typeof createApiSession>>['authInput'],
   authProvider: Awaited<ReturnType<typeof createApiSession>>['authProvider'],
   filter: string,
-  observerAppId: string
+  observerAppId: string,
+  signal: AbortSignal
 ): Promise<ApiLogEntry[]> {
   const query = new URLSearchParams({
     page: '1',
@@ -112,7 +113,7 @@ async function fetchRecentFailures(
     order_by: 'TIME_CREATED'
   });
   const response = await requestGpApi(
-    { authProvider, authInput, baseUrl },
+    { authProvider, authInput, baseUrl, signal },
     { method: 'GET', path: `/actions?${query.toString()}` }
   );
 
@@ -190,10 +191,12 @@ export function registerLogsCommand(program: Command): void {
         const baseUrl = environmentBaseUrl(config.environment);
         let interrupted = false;
         let wake: (() => void) | undefined;
+        const cancel = new AbortController();
         const entries: ApiLogEntry[] = [];
         const seen = new Set<string>();
         const stop = (): void => {
           interrupted = true;
+          cancel.abort();
           wake?.();
         };
         process.once('SIGINT', stop);
@@ -207,8 +210,11 @@ export function registerLogsCommand(program: Command): void {
             if (interrupted) break;
             let batch: ApiLogEntry[];
             try {
-              batch = await fetchRecentFailures(baseUrl, authInput, authProvider, statusFilter, authInput.appId);
+              batch = await fetchRecentFailures(
+                baseUrl, authInput, authProvider, statusFilter, authInput.appId, cancel.signal
+              );
             } catch (error) {
+              if (interrupted) break;
               // While following, one dropped poll should not end the tail; a snapshot
               // (--once) has nothing to fall back on, so it still fails.
               const gpError = toGlobalPaymentsError(error);

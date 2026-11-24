@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
 import { runCommand } from '../contract/emit.js';
-import { ERROR_CODES, GlobalPaymentsError } from '../contract/errors.js';
+import { ERROR_CODES, GlobalPaymentsError, fileAccessError } from '../contract/errors.js';
 import { createApiSession } from '../core/api-session.js';
 import { environmentBaseUrl } from '../gpapi/auth.js';
 import { requestGpApi, type GpApiMethod, type GpApiResponse } from '../gpapi/request.js';
@@ -83,7 +83,12 @@ async function parsePostBody(data?: string, dataFile?: string): Promise<unknown>
     );
   }
 
-  const raw = dataFile === undefined ? data! : await readFile(dataFile, 'utf8');
+  let raw: string;
+  try {
+    raw = dataFile === undefined ? data! : await readFile(dataFile, 'utf8');
+  } catch (error) {
+    throw fileAccessError(error, ERROR_CODES.E_USAGE, 'read --data-file', dataFile!);
+  }
   try {
     return JSON.parse(raw) as unknown;
   } catch (error) {

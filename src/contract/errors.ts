@@ -163,6 +163,22 @@ function isFileNotFound(error: unknown): boolean {
  * AuthFailureError, pack-loader Errors, ...) maps onto the external, stable code
  * taxonomy. Commands never classify errors themselves.
  */
+/**
+ * Turn a failed read or write of a file the caller named into an error about that file.
+ * Without this an ENOENT fell through to E_RESULT_NOT_FOUND ("run a cert first") and
+ * EACCES or EISDIR to E_INTERNAL ("this is a bug").
+ */
+export function fileAccessError(error: unknown, code: ErrorCode, action: string, filePath?: string): unknown {
+  const errno = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (error instanceof GlobalPaymentsError || typeof errno !== 'string') return error;
+  const target = filePath ?? (error as NodeJS.ErrnoException).path ?? 'a file';
+  return new GlobalPaymentsError(code, `Could not ${action} ${target} (${errno}).`, {
+    details: { path: target, errno },
+    remediation: 'Check that the path is correct and that you have permission to use it, then rerun.',
+    cause: error
+  });
+}
+
 export function toGlobalPaymentsError(error: unknown): GlobalPaymentsError {
   if (error instanceof GlobalPaymentsError) {
     return error;

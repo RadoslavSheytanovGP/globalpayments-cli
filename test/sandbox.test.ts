@@ -111,4 +111,25 @@ describe('sandbox environment setup', () => {
       await rm(root, { recursive: true, force: true });
     }
   }, 15_000);
+
+  it('reports an env file it cannot write as a config error, not a bug', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'gp-sandbox-readonly-'));
+    try {
+      await writeFile(path.join(root, 'locked.env'), '', { mode: 0o400 });
+      const env: NodeJS.ProcessEnv = { ...process.env, GP_API_APP_ID: 'id', GP_API_APP_KEY: 'key' };
+      delete env.GP_API_ENVIRONMENT;
+      const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+      const result = spawnSync(
+        process.execPath,
+        ['--import', tsx, path.resolve('src', 'bin.ts'), 'sandbox', 'create', '--env-file', 'locked.env', '--json'],
+        { cwd: root, env, encoding: 'utf8' }
+      );
+
+      const envelope = JSON.parse(result.stdout);
+      expect(envelope.error.code).toBe('E_CONFIG_READ');
+      expect(envelope.error.message).toMatch(/locked\.env \(EACCES\)/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 15_000);
 });

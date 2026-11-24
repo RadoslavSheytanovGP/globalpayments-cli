@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ERROR_CODES, toGlobalPaymentsError } from '../src/contract/errors.js';
-import type { AuthProvider } from '../src/gpapi/auth.js';
+import { NetworkAuthError, type AuthProvider } from '../src/gpapi/auth.js';
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { GpApiRequestError, requestGpApi } from '../src/gpapi/request.js';
 
 const authProvider: AuthProvider = {
@@ -142,4 +146,34 @@ describe('authenticated GP API requests', () => {
       response: { error_code: 'ACTION_NOT_AUTHORIZED' }
     });
   });
+
+  it('gives the token request the same deadline as the API request', async () => {
+    const hangingAuth: AuthProvider = {
+      getToken: (_input, options) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(new NetworkAuthError('GP API auth request timed out')));
+        })
+    };
+
+    const error = await requestGpApi(
+      { ...deps, authProvider: hangingAuth, timeoutMs: 20 },
+      { method: 'GET', path: '/transactions' }
+    ).catch((e: unknown) => e);
+
+    expect(toGlobalPaymentsError(error).code).toBe(ERROR_CODES.E_NETWORK);
+  });
+
+  it('reports an unreadable --data-file as a usage error about that file', () => {
+    const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+    for (const dataFile of ['does-not-exist.json', 'test']) {
+      const result = spawnSync(
+        process.execPath,
+        ['--import', tsx, path.resolve('src', 'bin.ts'), 'api', 'post', '/transactions', '--data-file', dataFile, '--json'],
+        { encoding: 'utf8', env: { ...process.env, GP_API_APP_ID: 'id', GP_API_APP_KEY: 'key', GP_API_ENVIRONMENT: 'sandbox' } }
+      );
+      const envelope = JSON.parse(result.stdout);
+      expect(envelope.error.code).toBe(ERROR_CODES.E_USAGE);
+      expect(envelope.error.message).toContain(dataFile);
+    }
+  }, 15_000);
 });

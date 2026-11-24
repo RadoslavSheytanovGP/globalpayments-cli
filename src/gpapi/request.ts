@@ -105,10 +105,11 @@ export async function requestGpApi(
   request: GpApiRequest
 ): Promise<GpApiResponse> {
   const endpoint = buildEndpoint(deps.baseUrl, request.path);
-  const { accessToken } = await deps.authProvider.getToken(deps.authInput);
   const fetchImpl = deps.fetchImpl ?? fetch;
+  // One budget for the token and the request, so neither can hang on its own.
   const timeout = AbortSignal.timeout(deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const signal = deps.signal ? AbortSignal.any([deps.signal, timeout]) : timeout;
+  const { accessToken } = await deps.authProvider.getToken(deps.authInput, { signal });
 
   let response: Response;
   let text: string;

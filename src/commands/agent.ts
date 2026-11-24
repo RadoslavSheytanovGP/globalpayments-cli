@@ -6,7 +6,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ensureGitignoreEntries } from '../io/gitignore.js';
 import { runCommand } from '../contract/emit.js';
-import { ERROR_CODES, GlobalPaymentsError } from '../contract/errors.js';
+import { ERROR_CODES, GlobalPaymentsError, fileAccessError } from '../contract/errors.js';
 import { loadEnvFile } from '../config/env.js';
 import { loadObserverConfig } from '../config/load.js';
 
@@ -292,7 +292,21 @@ async function installMcpServer(root: string, installDirectory: string): Promise
     await mkdir(installDirectory, { recursive: true });
     if (!existsSync(marker)) await writeFile(marker, `${MCP_REVISION}\n`, 'utf8');
     await runInstaller('git', ['clone', '--no-checkout', MCP_REPOSITORY, path.join('.globalpayments', 'agent', 'server')], root);
-    await runInstaller('git', ['checkout', '--detach', MCP_REVISION], serverDirectory);
+    try {
+      await runInstaller('git', ['checkout', '--detach', MCP_REVISION], serverDirectory);
+    } catch (error) {
+      // The clone exists but is not at the pinned revision, and later runs refuse to touch
+      // it, so say how to get back to a clean start.
+      throw new GlobalPaymentsError(
+        ERROR_CODES.E_AGENT_SETUP_FAILED,
+        'Checking out the pinned MCP server revision failed.',
+        {
+          details: { revision: MCP_REVISION },
+          remediation: 'Delete .globalpayments/agent/ and rerun `globalpayments agent setup`.',
+          cause: error
+        }
+      );
+    }
   } else if (
     lstatSync(serverDirectory).isSymbolicLink() ||
     !existsSync(marker) ||
@@ -393,44 +407,49 @@ export function registerAgentCommands(program: Command): void {
             cwd: location.cwd
           };
         };
-        for (const editor of editors) {
-          const location = mcpConfigLocation(root, editor);
-          const existing = existsSync(location.path) ? await readFile(location.path, 'utf8') : '';
-          mergeMcpConfig(existing, location.key, launcherConfig(editor));
-        }
-
-        const agentsPath = path.join(root, 'AGENTS.md');
-        const existingAgents = existsSync(agentsPath) ? await readFile(agentsPath, 'utf8') : '';
-        const agentsContents = mergeAgentsGuide(existingAgents);
-        const gitignoreFile = await ensureGitignoreEntries(root, ['/.globalpayments/agent/']);
-
-        reportProgress('Installing the Global Payments MCP server for sandbox use.');
-        await installMcpServer(root, installDirectory);
-
-        await writeFile(path.join(installDirectory, 'launch-mcp.mjs'), createLauncherScript(), 'utf8');
-
-        reportProgress(`Installing SDK skills for ${editors.join(', ')}.`);
-        const skillArgs = [
-          '--yes',
-          SKILLS_INSTALLER,
-          'add',
-          `${SKILLS_REPOSITORY}@${SKILLS_REVISION}`,
-          '--skill',
-          '*',
-          '--copy'
-        ];
-        for (const editor of editors) {
-          skillArgs.push('--agent', skillAgent(editor));
-        }
-        skillArgs.push('--yes');
-        await runInstaller('npx', skillArgs, root);
-
         const configFiles: string[] = [];
-        for (const editor of editors) {
-          configFiles.push(await writeMcpConfig(root, editor, launcherConfig(editor)));
-        }
+        const agentsPath = path.join(root, 'AGENTS.md');
+        let gitignoreFile: string | undefined;
+        try {
+          for (const editor of editors) {
+            const location = mcpConfigLocation(root, editor);
+            const existing = existsSync(location.path) ? await readFile(location.path, 'utf8') : '';
+            mergeMcpConfig(existing, location.key, launcherConfig(editor));
+          }
 
-        await writeFile(agentsPath, agentsContents, 'utf8');
+          const existingAgents = existsSync(agentsPath) ? await readFile(agentsPath, 'utf8') : '';
+          const agentsContents = mergeAgentsGuide(existingAgents);
+          gitignoreFile = await ensureGitignoreEntries(root, ['/.globalpayments/agent/']);
+
+          reportProgress('Installing the Global Payments MCP server for sandbox use.');
+          await installMcpServer(root, installDirectory);
+
+          await writeFile(path.join(installDirectory, 'launch-mcp.mjs'), createLauncherScript(), 'utf8');
+
+          reportProgress(`Installing SDK skills for ${editors.join(', ')}.`);
+          const skillArgs = [
+            '--yes',
+            SKILLS_INSTALLER,
+            'add',
+            `${SKILLS_REPOSITORY}@${SKILLS_REVISION}`,
+            '--skill',
+            '*',
+            '--copy'
+          ];
+          for (const editor of editors) {
+            skillArgs.push('--agent', skillAgent(editor));
+          }
+          skillArgs.push('--yes');
+          await runInstaller('npx', skillArgs, root);
+
+          for (const editor of editors) {
+            configFiles.push(await writeMcpConfig(root, editor, launcherConfig(editor)));
+          }
+
+          await writeFile(agentsPath, agentsContents, 'utf8');
+        } catch (error) {
+          throw fileAccessError(error, ERROR_CODES.E_AGENT_SETUP_FAILED, 'update');
+        }
 
         const data: AgentSetupData = {
           editors,

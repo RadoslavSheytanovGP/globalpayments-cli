@@ -5,7 +5,7 @@ import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { runCommand } from '../contract/emit.js';
-import { ERROR_CODES, GlobalPaymentsError } from '../contract/errors.js';
+import { ERROR_CODES, GlobalPaymentsError, fileAccessError } from '../contract/errors.js';
 import { loadEnvFile } from '../config/env.js';
 import { ensureGitignoreEntries } from '../io/gitignore.js';
 
@@ -68,16 +68,20 @@ async function writeSandboxEnv(
 ): Promise<void> {
   const resolvedPath = path.resolve(envFile);
   const directory = path.dirname(resolvedPath);
-  await mkdir(directory, { recursive: true });
+  try {
+    await mkdir(directory, { recursive: true });
 
-  const existing = existsSync(resolvedPath) ? await readFile(resolvedPath, 'utf8') : '';
-  await writeFile(resolvedPath, mergeSandboxEnv(existing, values), {
-    encoding: 'utf8',
-    mode: 0o600
-  });
+    const existing = existsSync(resolvedPath) ? await readFile(resolvedPath, 'utf8') : '';
+    await writeFile(resolvedPath, mergeSandboxEnv(existing, values), {
+      encoding: 'utf8',
+      mode: 0o600
+    });
 
-  if (process.platform !== 'win32') {
-    await chmod(resolvedPath, 0o600);
+    if (process.platform !== 'win32') {
+      await chmod(resolvedPath, 0o600);
+    }
+  } catch (error) {
+    throw fileAccessError(error, ERROR_CODES.E_CONFIG_READ, 'write', envFile);
   }
 }
 
@@ -230,7 +234,9 @@ export function registerSandboxCommands(program: Command): void {
           !relativeEnvFile.startsWith(`..${path.sep}`) &&
           !path.isAbsolute(relativeEnvFile);
         const gitignoreFile = isInsideProject
-          ? await ensureGitignoreEntries(process.cwd(), [relativeEnvFile.split(path.sep).join('/')])
+          ? await ensureGitignoreEntries(process.cwd(), [relativeEnvFile.split(path.sep).join('/')]).catch((error: unknown) => {
+              throw fileAccessError(error, ERROR_CODES.E_CONFIG_READ, 'update', '.gitignore');
+            })
           : undefined;
 
         await writeSandboxEnv(options.envFile, {
