@@ -88,4 +88,58 @@ describe('authenticated GP API requests', () => {
       app_key: '[REDACTED]'
     });
   });
+
+  it('reports an unreachable GP API as a network error, not an internal bug', async () => {
+    deps.fetchImpl.mockRejectedValueOnce(new TypeError('fetch failed'));
+
+    const error = await requestGpApi(deps, { method: 'GET', path: '/transactions' }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(GpApiRequestError);
+    const gpError = toGlobalPaymentsError(error);
+    expect(gpError.code).toBe(ERROR_CODES.E_NETWORK);
+    expect(gpError.details).not.toHaveProperty('mayHaveBeenProcessed');
+  });
+
+  it('times out a request that never answers', async () => {
+    deps.fetchImpl.mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+        })
+    );
+
+    const error = await requestGpApi({ ...deps, timeoutMs: 20 }, { method: 'GET', path: '/transactions' }).catch(
+      (e: unknown) => e
+    );
+
+    expect((error as Error).message).toMatch(/timed out/);
+    expect(toGlobalPaymentsError(error).code).toBe(ERROR_CODES.E_NETWORK);
+  });
+
+  it('warns that an unanswered POST may already have been processed', async () => {
+    deps.fetchImpl.mockRejectedValueOnce(new TypeError('fetch failed'));
+
+    const error = await requestGpApi(deps, { method: 'POST', path: '/transactions', body: {} }).catch((e: unknown) => e);
+
+    const gpError = toGlobalPaymentsError(error);
+    expect(gpError.code).toBe(ERROR_CODES.E_NETWORK);
+    expect(gpError.details).toMatchObject({ mayHaveBeenProcessed: true });
+    expect(gpError.remediation).toMatch(/before sending it again/);
+  });
+
+  it('treats rate limiting as transient and keeps the GP error body on auth failures', async () => {
+    deps.fetchImpl.mockResolvedValueOnce(new Response('{}', { status: 429 }));
+    const limited = await requestGpApi(deps, { method: 'POST', path: '/transactions', body: {} }).catch((e: unknown) => e);
+    expect(toGlobalPaymentsError(limited).code).toBe(ERROR_CODES.E_NETWORK);
+    expect(toGlobalPaymentsError(limited).details).not.toHaveProperty('mayHaveBeenProcessed');
+
+    deps.fetchImpl.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error_code: 'ACTION_NOT_AUTHORIZED', detailed_error_code: '40004' }), { status: 403 })
+    );
+    const forbidden = await requestGpApi(deps, { method: 'GET', path: '/disputes' }).catch((e: unknown) => e);
+    expect(toGlobalPaymentsError(forbidden).code).toBe(ERROR_CODES.E_AUTH_INVALID_CREDENTIALS);
+    expect(toGlobalPaymentsError(forbidden).details).toMatchObject({
+      response: { error_code: 'ACTION_NOT_AUTHORIZED' }
+    });
+  });
 });

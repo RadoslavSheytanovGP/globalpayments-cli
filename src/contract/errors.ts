@@ -184,16 +184,32 @@ export function toGlobalPaymentsError(error: unknown): GlobalPaymentsError {
   }
 
   if (error instanceof GpApiRequestError) {
+    const response = error.responseBody === undefined ? {} : { response: error.responseBody };
     if (error.status === 401 || error.status === 403) {
       return new GlobalPaymentsError(ERROR_CODES.E_AUTH_INVALID_CREDENTIALS, error.message, {
-        details: { status: error.status, path: error.path },
+        details: { status: error.status, path: error.path, ...response },
         cause: error
       });
     }
 
-    if (error.status >= 500 || error.status === 0) {
+    if (error.status === 0 || error.status === 408 || error.status === 429 || error.status >= 500) {
+      // A write that got no answer, or a 5xx, may still have been applied by GP. Retrying
+      // blindly can create a second transaction, so the generic "retry is reasonable"
+      // advice for E_NETWORK is replaced for POST.
+      const unconfirmedWrite = error.method === 'POST' && error.status !== 429;
       return new GlobalPaymentsError(ERROR_CODES.E_NETWORK, error.message, {
-        details: { status: error.status, path: error.path },
+        details: {
+          status: error.status,
+          path: error.path,
+          ...response,
+          ...(unconfirmedWrite ? { mayHaveBeenProcessed: true } : {})
+        },
+        ...(unconfirmedWrite
+          ? {
+              remediation:
+                'The sandbox may have processed this POST before the failure. Check with `globalpayments logs tail --once` or `globalpayments transactions get <id>` before sending it again.'
+            }
+          : {}),
         cause: error
       });
     }

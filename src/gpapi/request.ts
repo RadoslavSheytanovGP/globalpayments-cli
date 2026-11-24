@@ -9,7 +9,11 @@ export interface GpApiRequestDeps {
   baseUrl: string;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
+  /** Abort the request after this long. Defaults to 30 seconds. */
+  timeoutMs?: number;
 }
+
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export interface GpApiRequest {
   method: GpApiMethod;
@@ -30,14 +34,22 @@ export class GpApiRequestInputError extends Error {
 }
 
 export class GpApiRequestError extends Error {
+  /**
+   * @param status HTTP status, or 0 when no response arrived (unreachable host, timeout).
+   * @param method Needed by callers to tell whether an unanswered request could still have
+   *   changed state: a POST that timed out may have created a transaction.
+   */
   constructor(
     message: string,
     readonly status: number,
     readonly path: string,
-    readonly responseBody: unknown
+    readonly responseBody: unknown,
+    readonly method: GpApiMethod = 'GET',
+    options: { cause?: unknown } = {}
   ) {
     super(message);
     this.name = 'GpApiRequestError';
+    if (options.cause !== undefined) this.cause = options.cause;
   }
 }
 
@@ -95,26 +107,46 @@ export async function requestGpApi(
   const endpoint = buildEndpoint(deps.baseUrl, request.path);
   const { accessToken } = await deps.authProvider.getToken(deps.authInput);
   const fetchImpl = deps.fetchImpl ?? fetch;
-  const response = await fetchImpl(endpoint, {
-    method: request.method,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'X-GP-Version': deps.authInput.apiVersion
-    },
-    ...(deps.signal ? { signal: deps.signal } : {}),
-    ...(request.method === 'POST' ? { body: JSON.stringify(request.body) } : {})
-  });
+  const timeout = AbortSignal.timeout(deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const signal = deps.signal ? AbortSignal.any([deps.signal, timeout]) : timeout;
 
-  const responseBody = parseResponseBody(await response.text());
-  const safeBody = safeResponseBody(responseBody);
+  let response: Response;
+  let text: string;
+  try {
+    response = await fetchImpl(endpoint, {
+      method: request.method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-GP-Version': deps.authInput.apiVersion
+      },
+      signal,
+      redirect: 'error',
+      ...(request.method === 'POST' ? { body: JSON.stringify(request.body) } : {})
+    });
+    text = await response.text();
+  } catch (error) {
+    if (deps.signal?.aborted) throw error;
+    const reason = timeout.aborted ? 'timed out' : 'could not be completed';
+    throw new GpApiRequestError(
+      `GP API request ${request.method} ${request.path} ${reason}.`,
+      0,
+      request.path,
+      undefined,
+      request.method,
+      { cause: error }
+    );
+  }
+
+  const safeBody = safeResponseBody(parseResponseBody(text));
 
   if (!response.ok) {
     throw new GpApiRequestError(
       `GP API rejected ${request.method} ${request.path} (${response.status}).`,
       response.status,
       request.path,
-      safeBody
+      safeBody,
+      request.method
     );
   }
 
