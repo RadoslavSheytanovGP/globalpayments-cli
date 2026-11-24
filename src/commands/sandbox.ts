@@ -19,11 +19,19 @@ export interface SandboxSetupData {
   appKeyConfigured: true;
 }
 
+/**
+ * Quote a value so Node's .env parser reads back exactly the same string. Inside double
+ * quotes that parser does not unescape \" or \\, so a value containing either is written
+ * in single quotes (or backticks), which it reads literally.
+ */
 function serializedEnvValue(value: string): string {
   if (/[\r\n\0]/.test(value)) {
     throw new GlobalPaymentsError(ERROR_CODES.E_USAGE, 'Credential values cannot contain line breaks or null bytes.');
   }
-  return JSON.stringify(value);
+  if (!/["\\]/.test(value)) return `"${value}"`;
+  if (!value.includes("'")) return `'${value}'`;
+  if (!value.includes('`')) return `\`${value}\``;
+  throw new GlobalPaymentsError(ERROR_CODES.E_USAGE, 'Credential values cannot contain all three quote characters.');
 }
 
 export function mergeSandboxEnv(contents: string, values: Record<(typeof CREDENTIAL_KEYS)[number], string>): string {

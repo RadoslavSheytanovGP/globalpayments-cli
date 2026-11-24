@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseEnv } from 'node:util';
 import { mergeSandboxEnv } from '../src/commands/sandbox.js';
 
 describe('sandbox environment setup', () => {
@@ -21,6 +22,14 @@ describe('sandbox environment setup', () => {
       'OTHER=value\r\nGP_API_APP_ID="new-id"\r\n# keep me\r\nGP_API_APP_KEY="key=value#with-specials"\r\nGP_API_ENVIRONMENT="sandbox"\r\n'
     );
   });
+
+  it.each(['plainKey123', 'ab"cd', 'x\\y', "it's\\", 'k=v#h', 'a\'b"c'])(
+    'writes %s so the env file reads back the same value',
+    (appKey) => {
+      const written = mergeSandboxEnv('', { GP_API_APP_ID: 'id', GP_API_APP_KEY: appKey, GP_API_ENVIRONMENT: 'sandbox' });
+      expect(parseEnv(written).GP_API_APP_KEY).toBe(appKey);
+    }
+  );
 
   it('does not allow credential values to inject additional env entries', () => {
     expect(() =>
