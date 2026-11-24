@@ -7,7 +7,7 @@ import { environmentBaseUrl } from '../gpapi/auth.js';
 import { requestGpApi } from '../gpapi/request.js';
 import { parseDuration } from '../util/index.js';
 
-interface ApiAction {
+export interface ApiAction {
   id?: string;
   action_type?: string;
   type?: string;
@@ -77,13 +77,15 @@ function matchesStatus(status: number, filter: string): boolean {
   return status === Number(filter);
 }
 
-function toLogEntry(action: ApiAction): ApiLogEntry | undefined {
+export function toLogEntry(action: ApiAction): ApiLogEntry | undefined {
   const status = numericStatus(action.http_response_code);
   if (status === undefined || !action.id) {
     return undefined;
   }
 
-  const message = action.response_message ?? (action.response_code === undefined ? undefined : String(action.response_code));
+  const responseCode = action.response_code === undefined ? undefined : String(action.response_code);
+  // GP often sends no response_message; repeating the code in its place printed it twice.
+  const message = action.response_message && action.response_message !== responseCode ? action.response_message : undefined;
   return {
     id: action.id,
     timeCreated: action.time_created,
@@ -91,7 +93,7 @@ function toLogEntry(action: ApiAction): ApiLogEntry | undefined {
     type: action.action_type ?? action.type ?? 'UNKNOWN',
     resource: action.resource,
     resourceId: action.resource_id,
-    responseCode: action.response_code === undefined ? undefined : String(action.response_code),
+    responseCode,
     ...(message ? { message: message.slice(0, 300) } : {})
   };
 }
