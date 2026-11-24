@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+  installerEnvironment,
   detectAgentEditors,
   createLauncherScript,
   mergeAgentsGuide,
@@ -101,8 +102,9 @@ describe('agent setup helpers', () => {
         if (key.startsWith('GP_API_') || key === 'GPAPI_APP' || key === 'ENV') delete env[key];
       }
 
+      // Editors do not all honour the configured cwd, so start it from somewhere else.
       const result = spawnSync(process.execPath, [path.join(agent, 'launch-mcp.mjs')], {
-        cwd: root,
+        cwd: os.tmpdir(),
         env,
         encoding: 'utf8'
       });
@@ -136,5 +138,17 @@ describe('agent setup helpers', () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it('keeps GP credentials out of the installer processes', () => {
+    const env = installerEnvironment({
+      PATH: '/usr/bin',
+      GP_API_APP_ID: 'id',
+      GP_API_APP_KEY: 'key',
+      GPAPI_APP: 'id:key',
+      NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/'
+    });
+
+    expect(env).toEqual({ PATH: '/usr/bin', NPM_CONFIG_REGISTRY: 'https://registry.npmjs.org/' });
   });
 });

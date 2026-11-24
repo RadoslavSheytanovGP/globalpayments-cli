@@ -13,6 +13,9 @@ import { loadObserverConfig } from '../config/load.js';
 const MCP_REPOSITORY = 'https://github.com/globalpayments/mcp-server.git';
 const MCP_REVISION = 'f177cbe6d612d63eb4a219940ad133e4583ec428';
 const SKILLS_REPOSITORY = 'globalpayments/agent-skills';
+/** Pinned like MCP_REVISION so a setup run installs exactly what was reviewed. */
+const SKILLS_REVISION = '545d77be3c72054eafee63cb5b0150843c43779d';
+const SKILLS_INSTALLER = 'skills@1.9.0';
 const MANAGED_START = '<!-- globalpayments-cli:start -->';
 const MANAGED_END = '<!-- globalpayments-cli:end -->';
 
@@ -178,8 +181,11 @@ ${MANAGED_END}`;
 export function createLauncherScript(): string {
   return `import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const projectRoot = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+// This file lives in <project>/.globalpayments/agent/, so the project root is two levels
+// up whatever working directory the editor starts the server in.
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const envFile = path.join(projectRoot, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
@@ -206,10 +212,22 @@ function isNodeVersionSupported(version: string): boolean {
   return major > 22 || (major === 22 && minor >= 20);
 }
 
+/**
+ * The environment for installer child processes, without GP credentials. setup loads .env
+ * into this process, and git, npm and npx (which runs a package from the registry) have no
+ * need for the app key.
+ */
+export function installerEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(env).filter(([key]) => !/^GP_API_|^GPAPI_/i.test(key))
+  );
+}
+
 function runInstaller(command: 'git' | 'npm' | 'npx' | 'node', args: string[], cwd: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
+      env: installerEnvironment(),
       stdio: 'ignore',
       shell: process.platform === 'win32'
     });
@@ -240,7 +258,7 @@ function runInstaller(command: 'git' | 'npm' | 'npx' | 'node', args: string[], c
 
 function gitOutput(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd, windowsHide: true }, (error, stdout) => {
+    execFile('git', args, { cwd, env: installerEnvironment(), windowsHide: true }, (error, stdout) => {
       if (error) {
         reject(new GlobalPaymentsError(
           ERROR_CODES.E_AGENT_SETUP_FAILED,
@@ -394,9 +412,9 @@ export function registerAgentCommands(program: Command): void {
         reportProgress(`Installing SDK skills for ${editors.join(', ')}.`);
         const skillArgs = [
           '--yes',
-          'skills',
+          SKILLS_INSTALLER,
           'add',
-          SKILLS_REPOSITORY,
+          `${SKILLS_REPOSITORY}@${SKILLS_REVISION}`,
           '--skill',
           '*',
           '--copy'
