@@ -179,6 +179,26 @@ export function registerSandboxCommands(program: Command): void {
           loadEnvFile(options.envFile);
         }
 
+        // Credentials already in the environment are reused as the sandbox app. If they were
+        // configured for another environment they are production keys, and saving them under
+        // GP_API_ENVIRONMENT=sandbox would hide that.
+        const configuredEnvironment = process.env.GP_API_ENVIRONMENT?.trim().toLowerCase();
+        if (
+          !options.replace &&
+          configuredEnvironment &&
+          configuredEnvironment !== 'sandbox' &&
+          (process.env.GP_API_APP_ID || process.env.GP_API_APP_KEY)
+        ) {
+          throw new GlobalPaymentsError(
+            ERROR_CODES.E_CONFIG_INVALID,
+            `The configured credentials are for GP_API_ENVIRONMENT=${configuredEnvironment}; they were not saved as sandbox credentials.`,
+            {
+              details: { environment: configuredEnvironment },
+              remediation: 'Rerun `globalpayments sandbox create --replace` and enter the sandbox app credentials, or unset the production GP_API_* variables first.'
+            }
+          );
+        }
+
         const appId = await resolveCredential(
           process.env.GP_API_APP_ID,
           'GP_API_APP_ID',

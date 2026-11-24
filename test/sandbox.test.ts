@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -78,6 +79,25 @@ describe('sandbox environment setup', () => {
       expect(sentKey).toBe(true);
       expect(output).not.toContain('test-secret-key');
       expect(await readFile(path.join(root, '.env'), 'utf8')).toContain('GP_API_APP_KEY="test-secret-key"');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('does not save production credentials from the environment as sandbox credentials', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'gp-sandbox-prod-'));
+    try {
+      const env = { ...process.env, GP_API_APP_ID: 'prod-id', GP_API_APP_KEY: 'prod-key', GP_API_ENVIRONMENT: 'production' };
+      const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+      const result = spawnSync(
+        process.execPath,
+        ['--import', tsx, path.resolve('src', 'bin.ts'), 'sandbox', 'create', '--json'],
+        { cwd: root, env, encoding: 'utf8' }
+      );
+
+      expect(result.status).not.toBe(0);
+      expect(JSON.parse(result.stdout).error.message).toMatch(/GP_API_ENVIRONMENT=production/);
+      expect(existsSync(path.join(root, '.env'))).toBe(false);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
