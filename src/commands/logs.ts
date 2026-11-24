@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import pc from 'picocolors';
 import { runCommand } from '../contract/emit.js';
-import { ERROR_CODES, GlobalPaymentsError } from '../contract/errors.js';
+import { ERROR_CODES, GlobalPaymentsError, toGlobalPaymentsError } from '../contract/errors.js';
 import { createApiSession } from '../core/api-session.js';
 import { environmentBaseUrl } from '../gpapi/auth.js';
 import { requestGpApi } from '../gpapi/request.js';
@@ -187,10 +187,12 @@ export function registerLogsCommand(program: Command): void {
         });
         const baseUrl = environmentBaseUrl(config.environment);
         let interrupted = false;
+        let wake: (() => void) | undefined;
         const entries: ApiLogEntry[] = [];
         const seen = new Set<string>();
         const stop = (): void => {
           interrupted = true;
+          wake?.();
         };
         process.once('SIGINT', stop);
         process.once('SIGTERM', stop);
@@ -201,7 +203,17 @@ export function registerLogsCommand(program: Command): void {
 
           do {
             if (interrupted) break;
-            const batch = await fetchRecentFailures(baseUrl, authInput, authProvider, statusFilter, authInput.appId);
+            let batch: ApiLogEntry[];
+            try {
+              batch = await fetchRecentFailures(baseUrl, authInput, authProvider, statusFilter, authInput.appId);
+            } catch (error) {
+              // While following, one dropped poll should not end the tail; a snapshot
+              // (--once) has nothing to fall back on, so it still fails.
+              const gpError = toGlobalPaymentsError(error);
+              if (options.once || gpError.code !== ERROR_CODES.E_NETWORK) throw error;
+              reportProgress(pc.yellow(`Poll failed (${gpError.message}); retrying.`));
+              batch = [];
+            }
             const unseen = batch
               .filter((entry) => !seen.has(entry.id))
               .reverse();
@@ -215,7 +227,14 @@ export function registerLogsCommand(program: Command): void {
             if (options.once || interrupted || Date.now() >= deadline) {
               break;
             }
-            await new Promise((resolve) => setTimeout(resolve, Math.min(intervalMs, Math.max(0, deadline - Date.now()))));
+            await new Promise<void>((resolve) => {
+              const timer = setTimeout(resolve, Math.min(intervalMs, Math.max(0, deadline - Date.now())));
+              wake = () => {
+                clearTimeout(timer);
+                resolve();
+              };
+            });
+            wake = undefined;
           } while (!interrupted);
         } finally {
           process.off('SIGINT', stop);
