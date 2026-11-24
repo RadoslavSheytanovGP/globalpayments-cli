@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
 import { gzipSync } from 'node:zlib';
+import { spawnSync } from 'node:child_process';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createLocalWebhookServer,
@@ -154,4 +158,78 @@ describe('local webhook tooling', () => {
       await once(server, 'close');
     }
   });
+
+  // The worked example from GP's "Validating Webhook Notifications" page
+  // (developer.globalpayments.com/api/definitions/webhooks), sent pretty-printed and
+  // gzipped the way GP delivers it, so the listener must minify before hashing.
+  it('verifies the signature of the example webhook in the GP documentation', async () => {
+    const documented = {
+      id: 'TRN_wRWA1rOQeVRDUOafRmirrpYPURPODJ_44819181', time_created: '2024-07-03T15:23:51.342Z', type: 'SALE',
+      status: 'CAPTURED', channel: 'CNP', capture_mode: 'AUTO', amount: '1005', currency: 'EUR', country: 'DE',
+      merchant_id: 'MER_f414851d386a4e1f9fa4beb56c5e38b9', merchant_name: 'Global Payments Test Merchant Mason',
+      account_id: 'TRA_4d49f5d4e1b84ea4a28c8902a8538375', account_name: '79810948', reference: '44819181',
+      payment_method: {
+        result: '00', message: 'SUCCEEDED', entry_mode: 'ECOM',
+        apm: {
+          provider: 'testpay', wait_notification: '', fund_status: 'NOT_EXPECTED', payment_description: '546CCB7',
+          confirmed_accountholder: '', account_number: '', iban: '', bank_identifier_code: '', bank_name: '',
+          bank_address: '', optional_redirect: ''
+        }
+      },
+      batch_id: '',
+      action: {
+        id: 'ACT_Jm6BviEawzx7XgbQZUh0dbfBettgQ5', type: 'STATUS_NOTIFICATION', time_created: '2024-07-03T15:24:52.217Z',
+        result_code: 'SUCCESS', app_id: 'a5f0OOTJdAChObGXIqi8I5eGq6i6sLlJ', app_name: 'sean_sandbox_app'
+      }
+    };
+    const signature =
+      'ee16e2d14fb2969565499c172522e69955945a544751a5fa9e5fc775b3141785612c223ed77c2ff4cc367ead60f816c4fec6e16dc35564882d9aa695a3d0a907';
+    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 200 }));
+    const server = createLocalWebhookServer({
+      forwardTo: parseLocalForwardTarget('http://localhost:3000/webhooks'),
+      appKey: 'WinZP9PgPfVZuTi4',
+      fetchImpl
+    });
+    const port = await listenOnLoopback(server, 0);
+    const send = (body: string, sig: string): Promise<Response> =>
+      fetch(`http://127.0.0.1:${port}/`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-encoding': 'gzip', 'x-gp-signature': sig },
+        body: gzipSync(body)
+      });
+
+    try {
+      expect((await send(JSON.stringify(documented, null, 3), signature)).status).toBe(200);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      const tampered = JSON.stringify({ ...documented, amount: '100500' }, null, 3);
+      expect((await send(tampered, signature)).status).toBe(401);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      server.close();
+      await once(server, 'close');
+    }
+  });
+
+  it('reports a busy listener port as a usage error with the fix', async () => {
+    const blocker = createLocalWebhookServer({ forwardTo: parseLocalForwardTarget('http://localhost:3000/webhooks') });
+    const port = await listenOnLoopback(blocker, 0);
+    try {
+      const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+      const result = spawnSync(
+        process.execPath,
+        ['--import', tsx, path.resolve('src', 'bin.ts'), 'listen', '--forward-to', 'http://localhost:3000/webhooks',
+          '--port', String(port), '--timeout', '1s', '--json'],
+        { encoding: 'utf8' }
+      );
+
+      expect(result.status).toBe(EXIT_CODES.USAGE);
+      const envelope = JSON.parse(result.stdout);
+      expect(envelope.error.message).toMatch(new RegExp(`Port ${port} is already in use`));
+      expect(envelope.error.remediation).toMatch(/--port/);
+    } finally {
+      blocker.close();
+      await once(blocker, 'close');
+    }
+  }, 15_000);
 });

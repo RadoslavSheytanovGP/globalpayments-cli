@@ -137,7 +137,22 @@ export function registerWebhookCommands(program: Command): void {
           }
         });
 
-        const listeningPort = await listenOnLoopback(server, port);
+        let listeningPort: number;
+        try {
+          listeningPort = await listenOnLoopback(server, port);
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (code === 'EADDRINUSE' || code === 'EACCES') {
+            throw new GlobalPaymentsError(
+              ERROR_CODES.E_USAGE,
+              code === 'EADDRINUSE'
+                ? `Port ${port} is already in use on 127.0.0.1.`
+                : `Not allowed to listen on port ${port}.`,
+              { remediation: 'Pass a free port with --port, and the same --port to `globalpayments trigger`.', cause: error }
+            );
+          }
+          throw error;
+        }
         reportProgress(`Listening on http://127.0.0.1:${listeningPort}; forwarding to ${forwardTo.href}.`);
 
         let stoppedBy = 'signal';
