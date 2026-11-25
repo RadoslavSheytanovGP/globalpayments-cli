@@ -21,6 +21,77 @@ Certification commands poll recent transactions and actions, match them against 
 - **CLI workflows** — Use the commands interactively or in automation
 - **Machine-readable everywhere** — `--json` on every command emits one versioned envelope with stable error codes, remediation, and suggested next commands
 
+## Interactive shell
+
+Run `globalpayments` on its own in a terminal and you get a shell where every command is a slash command.
+
+![The globalpayments shell: wordmark, sandbox badge, live command palette and completion](docs/images/shell.gif)
+
+Type `/` to see everything, keep typing to filter, and press Enter to run the highlighted command, so `/doc` and Enter runs `/doctor`. Tab completes commands, flags and values: pack ids after `--cert`, case addresses after `cases show` and `diagnose`, webhook events after `trigger`, and matching files after `--env-file`, `--config` and `--data-file`. The up arrow goes back through history, filtered by whatever you already typed, and a grey suggestion from history can be taken with the right arrow. The badge in the prompt says whether requests go to sandbox or production, and switches the moment `/sandbox create` writes new credentials.
+
+Every command runs exactly the way it does outside the shell, with the same flags, output and exit codes, so whatever you try here works the same in a script. Commands work with or without the slash, and a pasted `globalpayments doctor` just runs `doctor`. When something fails the shell tells you what the exit code means and which command to try next. Ctrl+C clears the line (or stops the running command), and pressing it twice on an empty line leaves.
+
+| Shell command | What it does |
+| --- | --- |
+| `/help [command]` | Every command grouped by task, or the help for one |
+| `/theme [name]` | Preview the colour themes, or switch to one |
+| `/banner full\|compact\|off` | Choose the wordmark shown at start |
+| `/env` | Where requests go and where the credentials came from (the key is never shown) |
+| `/history` | Recent commands |
+| `/docs` | Developer portal and API reference links |
+| `/clear`, `/version`, `/exit` | Clear the screen, print the version, leave |
+
+| Key | Action |
+| --- | --- |
+| Tab / Shift+Tab | Complete, or move through the palette |
+| ↑ ↓ | Move through the palette, or through history |
+| → or End | Accept the grey suggestion |
+| Esc | Close the palette |
+| Ctrl+A / Ctrl+E | Start or end of the line |
+| Ctrl+W / Ctrl+U / Ctrl+K | Delete a word, everything before the cursor, or everything after it |
+| Ctrl+L | Clear the screen |
+| Ctrl+C / Ctrl+D | Clear the line / leave |
+
+Pasting never runs half a command. A pasted newline becomes a space and nothing runs until you press Enter. History lives in your config directory and anything that looks like a card number, an inline `--data` body or a key is kept for the session only and never written to disk.
+
+The shell only starts when both ends are a terminal. Piped, in CI, or under an agent, a bare `globalpayments` prints help and exits, and `globalpayments shell` reads commands from stdin one per line:
+
+```bash
+printf '/doctor\n/packs list\n' | globalpayments shell
+```
+
+### Make it yours
+
+The default theme uses the Global Payments brand colours: the wordmark and the sandbox badge are white on Global Blue, accents are Pulse Blue, warnings are Creamsicle and only failures are Raspberry. A passing check is a blue tick because the brand has no green and leads positive results with blue. The `classic` theme uses your terminal's own palette if you want green and red back.
+
+```bash
+globalpayments ui themes                # preview every theme in your terminal
+globalpayments ui set theme gp-light    # gp, gp-light, classic, mono, or auto
+globalpayments ui set banner compact    # full, compact or off
+globalpayments ui show                  # every setting and where its value came from
+globalpayments ui reset                 # back to the defaults
+```
+
+| Setting | Values | Environment variable |
+| --- | --- | --- |
+| `theme` | `auto` (default), `gp`, `gp-light`, `classic`, `mono` | `GP_CLI_THEME` |
+| `banner` | `full` (default), `compact`, `off` | `GP_CLI_BANNER` |
+| `icons` | `auto` (default), `unicode`, `ascii` | `GP_CLI_ICONS` |
+| `motion` | `on` (default), `off` for no animated spinners | `GP_CLI_MOTION` |
+| `hints` | `on` (default), `off` for no live palette or grey suggestions | `GP_CLI_HINTS` |
+
+Settings are personal, so they're saved in `~/.config/globalpayments/ui.json` (or `$XDG_CONFIG_HOME`, `%APPDATA%` on Windows, or `GP_CLI_CONFIG_DIR`), never in the project, and an environment variable beats the file. `auto` picks `gp-light` when the terminal says it has a light background. Colour follows the usual rules: `NO_COLOR` or `--no-color` turns it off, `FORCE_COLOR` or `--color` keeps it when piping, and output to a pipe or file never has escape codes in it. None of this changes `--json` output.
+
+### Tab completion in your own shell
+
+```bash
+eval "$(globalpayments completion bash)"                                  # add to ~/.bashrc
+eval "$(globalpayments completion zsh)"                                   # add to ~/.zshrc
+globalpayments completion fish > ~/.config/fish/completions/globalpayments.fish
+```
+
+Completion asks the CLI itself on every Tab, so it knows the same commands, flags, pack ids and case addresses as the shell and never goes out of date.
+
 ## Automation and agents
 
 Every command supports `--json`, and every JSON invocation writes exactly one envelope
@@ -521,7 +592,7 @@ Typical output for a case that saw no match:
       ✓ channel
       ✗ amount  expected 2002  observed 1001
 
-    to turn this green:
+    to make it pass:
       1. [high] Set `amount` to 2002 in the request you send. The closest observed
          transaction (id TRN_ccc) used 1001.
 ```

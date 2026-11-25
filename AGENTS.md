@@ -83,6 +83,21 @@ into a parser.
 
 **Branch on `error.code` or the exit code. Never parse `error.message`.**
 
+### People get a shell, agents never do
+
+`globalpayments` with no arguments opens an interactive shell, but only when stdin and
+stdout are both a terminal and `CI` is unset. Anywhere else it prints help and exits 0,
+so it can never hang an automated caller waiting for input. `globalpayments shell --json`
+returns the shell's command list without starting it, and piped stdin runs one command
+per line. Agents should keep calling commands directly with `--json`.
+
+Terminal settings (`globalpayments ui ...`, `GP_CLI_THEME`, `GP_CLI_BANNER`, `GP_CLI_ICONS`,
+`GP_CLI_MOTION`, `GP_CLI_HINTS`, `NO_COLOR`, `FORCE_COLOR`, `--no-color`, `--color`) only
+change how text output looks. They never change a `--json` envelope, and text written to a
+pipe never contains escape codes. `--no-color` and `--color` are accepted anywhere on the
+line. `globalpayments __complete` is internal plumbing for shell completion and is left
+out of `explain`.
+
 ---
 
 ## 4. Exit codes

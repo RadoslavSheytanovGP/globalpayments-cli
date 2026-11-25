@@ -15,6 +15,10 @@ node dist/bin.js --help
 
 No Node.js/npm? Use Docker instead — skip the `npm install`/`npm run build` steps above and run every `npm run dev -- <command>` in this guide as `docker compose run --rm globalpayments <command>` (e.g. `docker compose run --rm globalpayments --help`).
 
+## Prefer to explore?
+
+Run the CLI with no arguments in a terminal (`node dist/bin.js`, or `globalpayments` once it's installed) to open the interactive shell. Type `/` to browse every command, Tab to complete flags, pack ids and case addresses, and `/help` for the keys. Everything below works the same there as a slash command, for example `/doctor` or `/watch --cert global-core`.
+
 ## Set Up Credentials
 
 For an existing sandbox app, open the [Global Payments Developer Portal](https://developer.globalpayments.com),
@@ -148,7 +152,7 @@ exact matcher field that differed, and the change to make to your request:
     closest observed: TRN_ccc — 2/3 matcher fields, 67%
       ✗ amount  expected 2002  observed 1001
 
-    to turn this green:
+    to make it pass:
       1. [high] Set `amount` to 2002 in the request you send.
 ```
 
