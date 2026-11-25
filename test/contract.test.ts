@@ -264,6 +264,12 @@ describe('contract: manifest', () => {
         'transactions.testpay',
         'trigger',
         'watch',
+        'shell',
+        'ui.show',
+        'ui.set',
+        'ui.reset',
+        'ui.themes',
+        'completion'
       ].sort()
     );
   });

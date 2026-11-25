@@ -221,6 +221,8 @@ function describeCommands(program: Command, prefix: string[] = []): ManifestComm
   const out: ManifestCommand[] = [];
 
   for (const command of program.commands) {
+    // Hidden commands are plumbing for other tools (shell completion), not part of the contract.
+    if ((command as Command & { _hidden?: boolean })._hidden) continue;
     const path = [...prefix, command.name()];
     const children = describeCommands(command, path);
 

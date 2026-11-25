@@ -19,6 +19,11 @@ import { registerLogsCommand } from './commands/logs.js';
 import { registerWebhookCommands } from './commands/webhooks.js';
 import { registerAgentCommands } from './commands/agent.js';
 import { registerQuickStartCommand } from './commands/quick-start.js';
+import { registerShellCommand, startShell } from './commands/shell.js';
+import { registerUiCommands } from './commands/ui.js';
+import { registerCompletionCommands } from './commands/completion.js';
+import { commandPath, formatCommanderError, installHelp } from './ui/help.js';
+import { isInteractive } from './ui/capabilities.js';
 
 /**
  * Assemble the CLI.
@@ -35,11 +40,15 @@ export function buildCli(): Command {
     .description(
       'Global Payments developer CLI for certification observation, sandbox API access, transaction lookup, local webhook testing, request logs, and AI-agent tooling. Run `globalpayments explain --json` for the full machine-readable contract.'
     )
-    .version(CLI_VERSION);
+    .version(CLI_VERSION, '-V, --version', 'Print the version');
+
+  // Before any command is registered, so every subcommand inherits the formatter.
+  installHelp(program);
 
   // Orient
   registerExplainCommand(program);
   registerQuickStartCommand(program);
+  registerShellCommand(program);
   registerInitCommand(program);
   registerDoctorCommand(program);
   registerAuthCommands(program);
@@ -60,6 +69,10 @@ export function buildCli(): Command {
   // Review
   registerReportCommand(program);
   registerDiagnoseCommand(program);
+
+  // Personalise
+  registerUiCommands(program);
+  registerCompletionCommands(program);
 
   return program;
 }
@@ -83,6 +96,8 @@ function applyExitContract(command: Command, json: boolean): void {
   if (json) {
     // Commander writes its parse errors to stderr; in JSON mode the envelope reports them instead.
     command.configureOutput({ outputError: () => {} });
+  } else {
+    command.configureOutput({ outputError: (message, write) => write(formatCommanderError(message, commandPath(command))) });
   }
 
   command.exitOverride((error) => {
@@ -123,10 +138,31 @@ function wantsJson(argv: string[]): boolean {
   return (terminator === -1 ? argv : argv.slice(0, terminator)).includes('--json');
 }
 
-export async function runCli(argv: string[]): Promise<void> {
-  const program = buildCli();
-  applyExitContract(program, wantsJson(argv));
+/**
+ * Drop the global colour switches before commander sees them. They are read
+ * from process.argv by the UI layer, and stripping them here lets them appear
+ * anywhere on the line (`globalpayments doctor --no-color`) without every
+ * command declaring them.
+ */
+export function stripGlobalFlags(argv: string[]): string[] {
+  const terminator = argv.indexOf('--');
+  const head = terminator === -1 ? argv : argv.slice(0, terminator);
+  const tail = terminator === -1 ? [] : argv.slice(terminator);
+  return [...head.filter((arg) => arg !== '--no-color' && arg !== '--color'), ...tail];
+}
 
-  await program.parseAsync(argv);
+export async function runCli(argv: string[]): Promise<void> {
+  const args = stripGlobalFlags(argv);
+  const program = buildCli();
+  applyExitContract(program, wantsJson(args));
+
+  // `globalpayments` on its own, at a keyboard, opens the shell. Piped, scripted
+  // or in CI it keeps printing help, so automation never hangs on a prompt.
+  if (args.length <= 2 && isInteractive()) {
+    await startShell(program);
+    return;
+  }
+
+  await program.parseAsync(args);
 
 }
