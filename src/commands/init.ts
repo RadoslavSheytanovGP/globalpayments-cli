@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { statusMark, t } from '../ui/index.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -98,8 +98,8 @@ export function registerInitCommand(program: Command): void {
           data: { directory: options.dir, files, packsAvailable } satisfies InitData,
           render: (data) => {
             for (const file of data.files) {
-              const icon = file.created ? pc.green('✓') : pc.gray('–');
-              console.log(`${icon} ${pc.cyan(file.path)} ${pc.gray(file.reason)}`);
+              const icon = file.created ? statusMark('pass') : statusMark('skip');
+              console.log(`${icon} ${t.accent(file.path)} ${t.muted(file.reason)}`);
             }
           },
           nextActions: [

@@ -1,5 +1,7 @@
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { statusMark, sym, t } from '../ui/index.js';
+import { highlightJson, pruneEmpty } from '../ui/text.js';
+import { withSpinner } from '../ui/spinner.js';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { isIP } from 'node:net';
@@ -102,9 +104,16 @@ async function parsePostBody(data?: string, dataFile?: string): Promise<unknown>
 }
 
 function renderApiResult(result: ApiResult): void {
-  console.log(pc.green(`${result.method} ${result.path} → ${result.status} (${result.environment})`));
+  console.log(
+    `${statusMark('pass')} ${t.strong(result.method)} ${result.path} ${t.muted(sym().arrow)} ${t.success(String(result.status))} ${t.muted(result.environment)}`
+  );
   if (result.body !== undefined) {
-    console.log(JSON.stringify(result.body, null, 2));
+    // Only a person at a terminal gets the trimmed view; piped text keeps every field.
+    const { value, removed } = process.stdout.isTTY ? pruneEmpty(result.body) : { value: result.body, removed: 0 };
+    console.log(highlightJson(value));
+    if (removed > 0) {
+      console.log(t.muted(`${removed} empty field${removed === 1 ? '' : 's'} hidden ${sym().dot} add --json for the raw response`));
+    }
   }
 }
 
@@ -157,7 +166,7 @@ export function registerApiCommands(program: Command): void {
     .option('--json', 'Emit a single JSON envelope on stdout and nothing else')
     .action(async (requestPath: string, options: ApiCommandOptions) => {
       await runCommand<ApiResult>('api.get', { json: options.json }, async () => {
-        const data = await executeApiRequest('GET', requestPath, options);
+        const data = await withSpinner(`GET ${requestPath}`, () => executeApiRequest('GET', requestPath, options), { silent: options.json });
         return {
           data,
           render: renderApiResult,
@@ -177,7 +186,7 @@ export function registerApiCommands(program: Command): void {
     .action(async (requestPath: string, options: ApiCommandOptions & { data?: string; dataFile?: string }) => {
       await runCommand<ApiResult>('api.post', { json: options.json }, async () => {
         const body = await parsePostBody(options.data, options.dataFile);
-        const data = await executeApiRequest('POST', requestPath, options, body);
+        const data = await withSpinner(`POST ${requestPath}`, () => executeApiRequest('POST', requestPath, options, body), { silent: options.json });
         return {
           data,
           render: renderApiResult,
@@ -196,7 +205,9 @@ export function registerApiCommands(program: Command): void {
     .option('--json', 'Emit a single JSON envelope on stdout and nothing else')
     .action(async (id: string, options: ApiCommandOptions) => {
       await runCommand<ApiResult>('transactions.get', { json: options.json }, async () => {
-        const data = await executeApiRequest('GET', `/transactions/${encodeURIComponent(id)}`, options);
+        const data = await withSpinner(`Looking up ${id}`, () => executeApiRequest('GET', `/transactions/${encodeURIComponent(id)}`, options), {
+          silent: options.json
+        });
         return {
           data,
           render: renderApiResult,
@@ -224,7 +235,9 @@ export function registerApiCommands(program: Command): void {
     }) => {
       await runCommand<ApiResult>('transactions.testpay', { json: options.json }, async () => {
         const body = buildTestPayRequest(options);
-        const data = await executeApiRequest('POST', '/transactions', options, body);
+        const data = await withSpinner('Starting a TestPay sale', () => executeApiRequest('POST', '/transactions', options, body), {
+          silent: options.json
+        });
         return {
           data,
           render: (result) => {

@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { t } from '../ui/index.js';
 import { runCommand, type CommandOutcome } from '../contract/emit.js';
 import { certificationError, collectRunResult, createSession, trackObservation } from '../core/session.js';
 import { persistRunResult } from '../core/result-store.js';
@@ -49,7 +49,7 @@ export function registerWatchCommand(program: Command): void {
         const live = !options.json;
 
         if (live) {
-          console.log(pc.cyan('watch'), `Observing ${session.activePacks.length} pack(s). Ctrl-C to stop.\n`);
+          console.log(t.accent('watch'), `Observing ${session.activePacks.length} pack(s). Ctrl-C to stop.\n`);
         }
 
         const abortController = new AbortController();
@@ -108,7 +108,7 @@ export function registerWatchCommand(program: Command): void {
 
         session.engine.on('pollError', (event: { message: string }) => {
           if (live && !controller) {
-            console.error(pc.red('poll error:'), event.message);
+            console.error(t.danger('poll error:'), event.message);
           }
         });
         controller?.start(session.engine.getCaseStates());

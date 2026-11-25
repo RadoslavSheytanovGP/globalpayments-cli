@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { renderBanner } from '../ui/brand.js';
+import { t } from '../ui/index.js';
+import { terminalColumns, terminalRows } from '../ui/capabilities.js';
 import { loadEnvFile } from '../config/env.js';
 import { loadObserverConfig } from '../config/load.js';
 import { runCommand } from '../contract/emit.js';
@@ -134,17 +136,12 @@ export async function runTutorial(deps: TutorialDependencies): Promise<number> {
     return exit;
   }
 
-  say(pc.blue('  ____ _       _           _   ____                                   _       '));
-  say(pc.blue(' / ___| | ___ | |__   __ _| | |  _ \\ __ _ _   _ _ __ ___   ___ _ __ | |_ ___ '));
-  say(pc.blue('| |  _| |/ _ \\| \'_ \\ / _` | | | |_) / _` | | | | \'_ ` _ \\ / _ \\ \'_ \\| __/ __|'));
-  say(pc.blue('| |_| | | (_) | |_) | (_| | | |  __/ (_| | |_| | | | | | |  __/ | | | |_\\__ \\'));
-  say(pc.blue(' \\____|_|\\___/|_.__/ \\__,_|_| |_|   \\__,_|\\__, |_| |_| |_|\\___|_| |_|\\__|___/'));
-  say(pc.cyan('                                           |___/  DEVELOPER CLI'));
+  for (const line of renderBanner({ mode: 'full', columns: terminalColumns(), rows: terminalRows(), indent: 1 })) say(line);
   say('\nWelcome! This tutorial is optional and uses sandbox only. No payments are sent automatically.\n');
 
   for (const [index, step] of steps.entries()) {
-    say(`${index + 1}. ${step.title}\n   ${step.explanation}`);
-    if (step.command) say(`   ${step.command}`);
+    say(`${t.accent(`${index + 1}.`)} ${t.heading(step.title)}\n   ${step.explanation}`);
+    if (step.command) say(`   ${t.muted('$')} ${t.command(step.command)}`);
     if (step.id === 'sandbox') {
       say('   Setup writes credentials to .env and may update .gitignore. Do not use production credentials.');
       if (await confirm('   Set up existing sandbox app credentials now?')) await execute(['sandbox', 'create'], false);

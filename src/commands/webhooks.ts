@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { statusMark, t } from '../ui/index.js';
 import { runCommand } from '../contract/emit.js';
 import { ERROR_CODES, GlobalPaymentsError } from '../contract/errors.js';
 import { createApiSession } from '../core/api-session.js';
@@ -87,7 +87,7 @@ function parsePort(value: string): number {
 
 function renderListenSummary(data: { port: number; forwarded: number; rejected: number; stoppedBy: string }): void {
   console.log(
-    pc.gray(`Webhook listener stopped (${data.stoppedBy}); forwarded=${data.forwarded}, rejected=${data.rejected}.`)
+    t.muted(`Webhook listener stopped (${data.stoppedBy}); forwarded=${data.forwarded}, rejected=${data.rejected}.`)
   );
 }
 
@@ -251,7 +251,7 @@ export function registerWebhookCommands(program: Command): void {
         return {
           data,
           render: (result) => {
-            console.log(pc.green('✓'), `Triggered ${result.event}; local receiver responded ${result.status}.`);
+            console.log(statusMark('pass'), `Triggered ${result.event}; local receiver responded ${result.status}.`);
           }
         };
       });

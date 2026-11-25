@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { t } from '../ui/index.js';
 import { runCommand } from '../contract/emit.js';
 import { ERROR_CODES, GlobalPaymentsError, toGlobalPaymentsError } from '../contract/errors.js';
 import { createApiSession } from '../core/api-session.js';
@@ -130,7 +130,7 @@ function renderEntry(entry: ApiLogEntry): string {
 }
 
 function renderTailSummary(data: LogsTailData): void {
-  console.log(pc.gray(`Stopped; captured ${data.entries.length} matching request error(s) (${data.statusFilter}).`));
+  console.log(t.muted(`Stopped; captured ${data.entries.length} matching request error(s) (${data.statusFilter}).`));
 }
 
 export function parseStatusFilter(value: string): string {
@@ -219,7 +219,7 @@ export function registerLogsCommand(program: Command): void {
               // (--once) has nothing to fall back on, so it still fails.
               const gpError = toGlobalPaymentsError(error);
               if (options.once || gpError.code !== ERROR_CODES.E_NETWORK) throw error;
-              reportProgress(pc.yellow(`Poll failed (${gpError.message}); retrying.`));
+              reportProgress(t.warning(`Poll failed (${gpError.message}); retrying.`));
               batch = [];
             }
             const unseen = batch

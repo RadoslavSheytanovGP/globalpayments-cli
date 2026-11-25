@@ -1,4 +1,5 @@
-import pc from 'picocolors';
+import { statusMark, sym, t } from '../ui/index.js';
+import { hang, humanCommand, inlineCode } from '../ui/text.js';
 import { buildEnvelope, type Envelope, type NextAction, type Warning } from './envelope.js';
 import { GlobalPaymentsError, toGlobalPaymentsError } from './errors.js';
 import { EXIT_CODES, exitCodeName, type ExitCode } from './exit-codes.js';
@@ -41,18 +42,19 @@ function write(stream: NodeJS.WritableStream, text: string): void {
  * message, then the remediation, then any structured detail.
  */
 export function renderErrorText(error: GlobalPaymentsError, stderr: NodeJS.WritableStream): void {
-  write(stderr, `${pc.red('✗')} ${pc.bold(error.code)}  ${error.message}\n`);
-  write(stderr, `  ${pc.gray('fix:')} ${error.remediation}\n`);
+  const tty = stderr as { isTTY?: boolean; columns?: number };
+  write(stderr, `${statusMark('fail')} ${t.strong(error.code)}  ${hang(error.message, 2, tty)}\n`);
+  write(stderr, `  ${t.muted('fix:')} ${hang(inlineCode(error.remediation), 7, tty)}\n`);
   if (error.details && Object.keys(error.details).length > 0) {
-    write(stderr, `  ${pc.gray('details:')} ${JSON.stringify(error.details)}\n`);
+    write(stderr, `  ${t.muted('details:')} ${JSON.stringify(error.details)}\n`);
   }
-  write(stderr, `  ${pc.gray('exit:')} ${error.exitCode} (${exitCodeName(error.exitCode)})\n`);
+  write(stderr, `  ${t.muted('exit:')} ${error.exitCode} (${exitCodeName(error.exitCode)})\n`);
 }
 
 function renderNextActionsText(actions: NextAction[], stdout: NodeJS.WritableStream): void {
-  write(stdout, `\n${pc.cyan('Next:')}\n`);
+  write(stdout, `\n${t.heading('Next')}\n`);
   for (const action of actions) {
-    write(stdout, `  ${pc.yellow(action.command)}\n    ${pc.gray(action.reason)}\n`);
+    write(stdout, `  ${t.accent(sym().info)} ${t.command(humanCommand(action.command))}\n    ${t.muted(action.reason)}\n`);
   }
 }
 
@@ -95,11 +97,21 @@ export function emit<T>(
     }
 
     for (const warning of envelope.warnings ?? []) {
-      write(stderr, `${pc.yellow('!')} ${pc.bold(warning.code)}  ${warning.message}\n`);
+      write(stderr, `${statusMark('warn')} ${t.strong(warning.code)}  ${warning.message}\n`);
     }
 
-    if (envelope.nextActions && envelope.nextActions.length > 0) {
-      renderNextActionsText(envelope.nextActions, outcome.error ? stderr : stdout);
+    // `explain` is an agent's map of the CLI. After a success it is noise to a
+    // person reading text, so text mode keeps it only as the fallback on failure.
+    const nextActions = (envelope.nextActions ?? [])
+      .filter((action) => outcome.error || !/^globalpayments explain\b/.test(action.command))
+      .map((action) =>
+        // A person who mistyped a flag wants this command's help, not the whole contract.
+        outcome.error?.code === 'E_USAGE' && /^globalpayments explain\b/.test(action.command)
+          ? { reason: 'See the arguments and flags this command accepts.', command: `globalpayments ${command.replace(/\./g, ' ')} --help` }
+          : action
+      );
+    if (nextActions.length > 0) {
+      renderNextActionsText(nextActions, outcome.error ? stderr : stdout);
     }
   }
 

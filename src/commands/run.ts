@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import pc from 'picocolors';
 import { runCommand, type CommandOutcome } from '../contract/emit.js';
 import { certificationError, collectRunResult, createSession, trackObservation } from '../core/session.js';
 import { persistRunResult } from '../core/result-store.js';

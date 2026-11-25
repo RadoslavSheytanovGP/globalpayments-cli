@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { statusMark, t } from '../ui/index.js';
 import { existsSync, lstatSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -462,10 +462,10 @@ export function registerAgentCommands(program: Command): void {
         return {
           data,
           render: (result) => {
-            console.log(pc.green('✓'), `Installed MCP server and SDK skills for ${result.editors.join(', ')}.`);
-            console.log(pc.gray(`  MCP settings: ${result.configFiles.join(', ')}`));
-            console.log(pc.gray(`  Agent guidance: ${result.agentsFile}`));
-            if (result.gitignoreFile) console.log(pc.gray(`  Ignored local MCP install in ${result.gitignoreFile}`));
+            console.log(statusMark('pass'), `Installed MCP server and SDK skills for ${result.editors.join(', ')}.`);
+            console.log(t.muted(`  MCP settings: ${result.configFiles.join(', ')}`));
+            console.log(t.muted(`  Agent guidance: ${result.agentsFile}`));
+            if (result.gitignoreFile) console.log(t.muted(`  Ignored local MCP install in ${result.gitignoreFile}`));
           },
           nextActions: [
             { reason: 'Restart or refresh the coding agent to load its new MCP tools and skills.', command: 'globalpayments explain --json' }

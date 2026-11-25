@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import pc from 'picocolors';
+import { statusMark, t } from '../ui/index.js';
 import { existsSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -260,9 +260,9 @@ export function registerSandboxCommands(program: Command): void {
         return {
           data,
           render: (result) => {
-            console.log(pc.green('✓'), `Sandbox credentials saved to ${pc.cyan(result.envFile)}`);
-            if (result.gitignoreFile) console.log(pc.gray(`  Added an ignore rule in ${result.gitignoreFile}`));
-            console.log(pc.gray('  Credentials are not displayed. This command configured an existing app; it did not create an account.'));
+            console.log(statusMark('pass'), `Sandbox credentials saved to ${t.accent(result.envFile)}`);
+            if (result.gitignoreFile) console.log(t.muted(`  Added an ignore rule in ${result.gitignoreFile}`));
+            console.log(t.muted('  Credentials are not displayed. This command configured an existing app; it did not create an account.'));
           },
           nextActions: [{ reason: 'Verify the credentials and sandbox connectivity.', command: 'globalpayments doctor --json' }]
         };
