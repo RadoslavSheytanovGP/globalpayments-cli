@@ -30,6 +30,7 @@
     "csv-to-cases": "tsx scripts/csv-to-cases.ts",
     "clean": "rimraf dist",
     "dev": "tsx src/bin.ts",
+    "quick-start": "tsx src/bin.ts quick-start",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

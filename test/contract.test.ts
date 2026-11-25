@@ -249,6 +249,7 @@ describe('contract: manifest', () => {
         'cases.list',
         'cases.show',
         'diagnose',
+        'quick-start',
         'doctor',
         'explain',
         'init',

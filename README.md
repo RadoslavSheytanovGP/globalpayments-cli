@@ -15,10 +15,10 @@ Certification commands poll recent transactions and actions, match them against 
 - **Certification pack system** — Modular, inheritable pack definitions with cases, matchers, and expectations
 - **Safe credential handling** — Redacted config output; credentials loaded from environment or secure config
 - **Sliding time-window polling** — Configurable overlap, page size, and poll interval; handles partial results gracefully
-- **Multiple evaluation modes** — Latest (single newest match), sequence (ordered matches), and aggregate (match counts)
+- **Declarative evaluation** — Judge the latest matching observation against the case's status and response expectations
 - **Graceful failure handling** — Timeout with partial results, ambiguous-match detection, detailed error messages
 - **Persistent result artifacts** — JSON output for CI consumption; timestamped history in `.globalpayments/results/`
-- **CLI + programmatic API** — Use as command-line tool or import as Node.js module
+- **CLI workflows** — Use the commands interactively or in automation
 - **Machine-readable everywhere** — `--json` on every command emits one versioned envelope with stable error codes, remediation, and suggested next commands
 
 ## Automation and agents
@@ -66,6 +66,10 @@ npm install --save-dev @globalpayments/cli
 npx @globalpayments/cli --help
 ```
 
+The published package may not yet include all commands described on this branch.
+Use `npx @globalpayments/cli <command>` for a project-local install; the bare
+`globalpayments` examples below assume the executable is on your `PATH`.
+
 ### Local development
 ```bash
 git clone https://github.com/globalpayments/globalpayments-cli.git
@@ -91,6 +95,20 @@ The `globalpayments` service builds a local image and runs your project director
 
 ## Quick Start
 
+For an interactive introduction to Global Payments, sandbox credentials, cases,
+and observation, run:
+
+```bash
+npx @globalpayments/cli quick-start
+```
+
+In a source checkout, use `npm run quick-start` (or build and run
+`node dist/bin.js quick-start`). The published npm package needs a release that
+includes this command. The tutorial asks before changing local files or making
+network requests; it never sends a payment. Use `quick-start --json` for its
+non-interactive steps. An existing Developer Portal sandbox app is required for
+connected steps.
+
 ### 1. Set up credentials
 ```bash
 export GP_API_APP_ID="your-app-id"
@@ -101,30 +119,47 @@ export GP_API_ENVIRONMENT="sandbox"              # or: production
 
 For interactive sandbox setup, create or select an existing sandbox app in the
 [Global Payments Developer Portal](https://developer.globalpayments.com), then run
-`globalpayments sandbox create`. It prompts for the app ID and hidden app key, saves
+`npx @globalpayments/cli sandbox create`. It prompts for the app ID and hidden app key, saves
 them to `.env`, adds an ignore rule when needed, and does not create an account or app.
+This command requires a CLI version that includes the developer workflows; use the
+local branch build as described below if it is not in the published package.
 
 Or generate an optional config file:
 ```bash
 npx @globalpayments/cli init --with-config
 # Writes .env.example and globalpayments.config.yaml
-# Pass --config globalpayments.config.yaml when using that generated config.
+# To use that file, add --config globalpayments.config.yaml to commands below.
 ```
+
+The generated config does not select a certification pack. The examples below
+select `global-core` explicitly; replace it with the pack you want to observe.
+If you omit `--config`, the CLI can use environment variables and `.env` instead.
+
+The `npx` examples use the installed or published package, which may not include
+changes on your local branch. If you cloned this repository, run `npm run build`
+and replace `npx @globalpayments/cli` with `node dist/bin.js` to use your build
+(`node .\dist\bin.js` in PowerShell).
 
 ### 2. List available certification cases
 ```bash
-npx @globalpayments/cli cases list --config globalpayments.config.yaml
-# Shows all cases by pack; use --pack <packId> to filter
+npx @globalpayments/cli packs list
+npx @globalpayments/cli cases list --cert global-core
 ```
 
 ### 3. Run certification observer
 ```bash
-# Watch mode: polls for up to 10 minutes, updates screen in real-time
-npx @globalpayments/cli watch --config globalpayments.config.yaml --timeout 10m
+npx @globalpayments/cli doctor --json
 
-# CI mode: single run, exit non-zero if required cases don't pass
-npx @globalpayments/cli run --config globalpayments.config.yaml --timeout 5m --json
+# Watch mode: polls for up to 10 minutes, updates screen in real-time
+npx @globalpayments/cli watch --cert global-core --timeout 10m
+
+# CI mode: observe until required cases pass or the timeout is reached
+npx @globalpayments/cli run --cert global-core --timeout 5m --json
 ```
+
+These commands observe transactions already sent; they do not create them.
+Exit `1` means the window was read but required cases are not all passing.
+Other nonzero exit codes indicate an error rather than a certification verdict.
 
 ### 4. Review results
 ```bash
@@ -184,7 +219,6 @@ stable error code and remediation.
 - Per-check `status` (`pass` / `fail` / `skip`), `detail`, and `remediation`
 - Resolved environment, base URL, and config source
 - Available bundled certification suites
-- Config redaction summary
 - Suggested next steps
 
 **Options:**
@@ -197,7 +231,7 @@ stable error code and remediation.
 Exchange credentials for a GP API token and report safe token metadata.
 
 **Options:**
-- `--config <path>` — Config file (default: `.gpcli/config.yaml`)
+- `--config <path>` — Config file (optional; omit to use environment variables)
 - `--env-file <path>` — Env file to load (default: `.env`)
 
 **Example:**
@@ -281,8 +315,9 @@ globalpayments logs tail --status 5xx --once --json
 
 ### `globalpayments listen` / `globalpayments trigger <event>`
 `listen` binds only to `127.0.0.1` and forwards POSTs to an unauthenticated localhost
-HTTP(S) URL. `trigger` sends a signed synthetic event to that listener; it does not
-create a transaction or register a real GP webhook.
+HTTP(S) URL. Start your local handler first, then run `listen` and `trigger` in
+separate terminals. `trigger` sends a signed synthetic event to that listener; it
+does not create a transaction or register a real GP webhook.
 
 ```bash
 globalpayments listen --forward-to http://localhost:3000/webhooks
@@ -346,6 +381,8 @@ globalpayments cases list --cert global-core
 
 Case addresses are formatted `<packId>:<caseId>` and are identical across
 `cases list`, `cases show`, `run`, `watch`, `report`, and `diagnose`.
+The `global-core:basic-sale-approved` smoke case accepts a captured CNP sale in
+any currency, including EUR and USD; it does not enforce a particular amount.
 
 ---
 
@@ -377,12 +414,11 @@ Poll for case matches in real-time. Continuously fetches transactions, evaluates
 **Exit codes:** see the [exit-code table](#exit-codes). `0` when all required cases
 pass, `1` when they do not, and a distinct code for config, auth, and network faults.
 
-**Output:**
+**Illustrative output** (your terminal layout and cases may differ):
 ```
 Polling (elapsed: 2m 15s | fetched: 234 txns | window: 15m)
 
-✓ global-core:sale-approved [PASS]
-✗ global-core:sale-declined [FAIL] — No matches found
+✓ global-core:basic-sale-approved [PASS]
 ○ global-ecommerce:3ds-sale [PEND] — Awaiting match
 
 Recent transactions:
@@ -393,7 +429,8 @@ Recent transactions:
 ---
 
 ### `globalpayments run`
-CI-friendly mode: single polling cycle, exit non-zero if any required cases fail. Use in automated pipelines.
+CI-friendly mode: poll until all required cases pass or the timeout is reached,
+then persist a result and exit. Use in automated pipelines.
 
 **Options:**
 - `--config <path>` — Config file (optional; omit to use env vars only)
@@ -414,10 +451,11 @@ infrastructure fault.
 - name: Validate certification
   run: |
     npx @globalpayments/cli run \
-      --config .globalpayments/config.yaml \
+      --cert global-core \
       --timeout 5m \
-      --json > results.json
+      --json > results.json || status=$?
     cat results.json
+    exit "${status:-0}"
 ```
 
 ---
@@ -546,7 +584,8 @@ activePacks:
 | `GP_API_ENVIRONMENT` | GP environment | no (default: `sandbox`) | `sandbox` or `production` |
 | `GP_API_VERSION` | GP API version | no (default: `2021-03-22`) | `2021-03-22` |
 
-All variables are read by `globalpayments init`, `globalpayments doctor`, and all polling commands.
+Credentials and configuration are read by `globalpayments doctor` and the polling
+commands. `init` writes templates; it does not validate credentials.
 
 ## How Polling Works
 
@@ -555,10 +594,12 @@ Each polling cycle:
 1. **Fetch observations** — Query GP API for recent records in a sliding time window:
    `GET /transactions` for transaction cases, `GET /actions` for actions cases. A feed
    is only polled when an active case uses it.
-2. **Evaluate all cases** — For each active case, find matching transactions
-3. **Apply latest-match-wins** — Re-evaluate each case using only the newest match in the window
-4. **Persist results** — Write `.globalpayments/results/latest.json` and timestamped history
-5. **Wait/repeat** — Sleep for `polling.intervalMs`, then repeat (or exit if timeout)
+2. **Evaluate all cases** — For each active case, find matching observations
+3. **Apply latest-match-wins** — Re-evaluate each case using the newest match in the window
+4. **Wait/repeat** — Sleep for `polling.intervalMs`, then repeat until all required cases pass or the timeout is reached
+
+After the run or watch ends, it writes `.globalpayments/results/latest.json` and
+timestamped history.
 
 **Time window logic:**
 - `lookbackMinutes` — How far back to look from now
@@ -568,8 +609,8 @@ Each polling cycle:
 **If no transactions match:**
 - Case remains pending (no fail)
 - If timeout is reached, case is reported pending with a "no matches found" reason
-- The case carries a `diagnosis` naming the closest observed transaction and the exact
-  matcher field that differed. Read it with `globalpayments diagnose`.
+- Read `globalpayments diagnose` for the cause and any available near matches.
+  When no suitable near match exists, there may be no field-level comparison.
 
 **If multiple matches exist:**
 - Only the newest match (by `timeCreated`) is used for evaluation
@@ -609,16 +650,19 @@ Things to know about the actions feed:
   error code instead of staying pending.
 - Bundled actions cases are tagged `action-type-confirmed`, `action-type-documented`, or
   `action-type-inferred`. Inferred cases are optional; if one stays pending,
-  `globalpayments diagnose` shows the action type GP actually logged.
-  `npm run verify:actions` confirms action types against a GP sandbox.
+  diagnosis may identify near matches, but cannot guarantee the logged action type
+  will be visible. `npm run verify:actions` checks action types against a GP sandbox
+  and can create sandbox resources; use it only when you intend to make those writes.
 
 ### Matcher
-Defines which transactions to match. AND semantics (all specified fields must match).
+Defines which observations to match. Composite and card fields must match. Reference
+matching uses a strategy ladder: exact reference, then prefix where available, then a
+composite match that ignores reference. A reference mismatch alone cannot prevent a match.
 
 ```yaml
 matcher:
-  reference: cert-sale-001        # exact match on reference
-  referencePrefix: cert-          # or: prefix match
+  reference: cert-sale-001        # preferred exact reference
+  referencePrefix: cert-          # preferred prefix if exact reference does not match
   type: SALE                      # transaction type
   amount: 100                      # amount (ignores decimal)
   currency: USD                    # currency code
@@ -630,7 +674,9 @@ matcher:
 ```
 
 ### Expectations
-Define what status/response the matched transaction should have. Currently supports `latest` (single newest match).
+Define what status/response the latest matching observation should have. The default
+evaluator skips `responseCodeIn` when the response code is absent; the transactions
+list endpoint commonly omits it.
 
 ```yaml
 expect:
@@ -643,27 +689,13 @@ expect:
 ```
 
 ### Evaluator (Optional)
-For complex pass/fail logic, provide a custom JavaScript evaluator function:
-
-```yaml
-evaluator:
-  type: script              # or: declarative
-  script: evaluators/my-case.js
-  export: default           # or: named export
-```
-
-Evaluator function signature:
-```typescript
-export default function evaluateCase(
-  caze: CertificationCase,
-  matches: ObservedTxn[],
-  context: EvaluationContext
-): CaseEvaluationResult;
-```
+The schema accepts evaluator configuration, but the current CLI does not load custom
+evaluator scripts. The built-in evaluator checks `expect.latest`; sequence and
+aggregate expectations are not currently evaluated by it.
 
 ### Example Case File
 
-`packs/global-core/cases/sale-approved.yaml`:
+Example custom case file (`packs/my-pack/cases/sale-approved.yaml`):
 ```yaml
 id: sale-approved
 name: Sale approved
@@ -685,56 +717,42 @@ expect:
 
 ## Result Artifacts
 
-After each polling cycle, results are written to:
+After a `run` or `watch` completes, results are written to:
 
 - **Latest:** `.globalpayments/results/latest.json`
 - **History:** `.globalpayments/results/history/<timestamp>.json`
 
-### Result JSON Schema
+### Result JSON example
+
+An excerpt of a persisted result (redacted configuration omitted):
 
 ```json
 {
+  "schemaVersion": 1,
   "timestamp": "2024-08-13T14:32:45.123Z",
-  "elapsed": "2m15s",
-  "transactionsFetched": 234,
-  "pollWindow": {
-    "from": "2024-08-13T14:17:45.123Z",
-    "to": "2024-08-13T14:32:45.123Z"
-  },
+  "environment": "sandbox",
+  "activePacks": ["global-core"],
+  "verdict": "passed",
+  "summary": { "total": 1, "pass": 1, "fail": 0, "pending": 0 },
+  "required": { "total": 1, "passing": 1, "failing": 0 },
   "cases": [
     {
-      "namespacedId": "global-core:sale-approved",
+      "namespacedCaseId": "global-core:basic-sale-approved",
+      "packId": "global-core",
+      "caseId": "basic-sale-approved",
       "status": "pass",
-      "required": true,
-      "reason": null,
-      "matchCount": 1,
+      "reason": "Latest matching transaction satisfies expectation",
+      "matchedCount": 1,
       "latestMatch": {
         "id": "txn-abc123",
         "timeCreated": "2024-08-13T14:31:58Z",
         "type": "SALE",
         "status": "CAPTURED",
         "amount": 100,
-        "currency": "USD",
-        "responseCode": "00"
+        "currency": "USD"
       }
-    },
-    {
-      "namespacedId": "global-ecommerce:3ds-sale",
-      "status": "pend",
-      "required": false,
-      "reason": "No matches found",
-      "matchCount": 0,
-      "latestMatch": null
     }
-  ],
-  "summary": {
-    "total": 2,
-    "passed": 1,
-    "failed": 0,
-    "pending": 1,
-    "requiredPassing": 1,
-    "requiredTotal": 1
-  }
+  ]
 }
 ```
 
@@ -762,8 +780,7 @@ jobs:
           GP_API_APP_KEY: ${{ secrets.GP_APP_KEY }}
           GP_API_ENVIRONMENT: sandbox
         run: |
-          npx @globalpayments/cli init --with-config
-          npx @globalpayments/cli run --config globalpayments.config.yaml --timeout 5m --json
+          npx @globalpayments/cli run --cert global-core --timeout 5m --json
 
       - name: Upload results
         if: always()
@@ -796,21 +813,21 @@ jobs:
 - **Solution:**
   1. Verify credentials in GP Developer Portal
   2. Confirm the account has API access enabled
-  3. Try `globalpayments auth test --config .globalpayments/config.yaml` to debug
+  3. Try `globalpayments doctor --json` to debug
 
 ### **Error: `No transactions found`**
 - **Cause:** Poll window is too small, or your integration hasn't submitted transactions yet
 - **Solution:**
-  1. Increase `polling.lookbackMinutes` in config (default: 15)
+  1. Increase `polling.lookbackMinutes` in config (default: 10)
   2. Ensure your integration is actively submitting test transactions
   3. Check that `accountName` in matcher rules matches your GP account
-  4. Run `globalpayments doctor` to confirm account access
+  4. Run `globalpayments doctor` to check authentication and connectivity
 
 ### **Error: `Ambiguous match` on a case**
 - **Cause:** Multiple transactions match with identical timestamp
 - **Solution:**
-  1. Tighten matcher rules (e.g., add `reference` or `amount` to disambiguate)
-  2. Add a custom evaluator to handle tie-breaking logic
+  1. Re-send the scenario once, alone, with a distinct reference
+  2. Check the applicable composite matcher fields with `globalpayments cases show <packId>:<caseId>`
 
 ### **Watch mode exits after timeout with partial results**
 - **Cause:** Timeout reached before all required cases passed
@@ -828,36 +845,16 @@ jobs:
 ### **Matcher rules not matching transactions**
 - **Cause:** Matcher fields don't align with actual transaction structure
 - **Solution:**
-  1. Run `globalpayments watch` to see recent transactions in real-time
+  1. Run `globalpayments watch --cert <packId>` to see recent transactions in real-time
   2. Compare transaction fields to your matcher criteria
-  3. Use `globalpayments cases show <caseId>` to review the full case definition
-  4. Add debug output to custom evaluators if using script mode
+  3. Use `globalpayments cases show <packId>:<caseId>` to review the full case definition
+  4. Use `globalpayments diagnose` for available field-level details
 
 ## Programmatic API
 
-Import and use globalpayments-cli as a Node.js module:
-
-```typescript
-import { buildCli } from '@globalpayments/cli';
-import { loadObserverConfig } from '@globalpayments/cli/config/load';
-import { CertificationEngine } from '@globalpayments/cli/core/engine';
-import { HttpGpApiClient } from '@globalpayments/cli/gpapi/client';
-import { GpApiAuthProvider } from '@globalpayments/cli/gpapi/auth';
-
-async function runCertification() {
-  const config = await loadObserverConfig('.globalpayments/config.yaml');
-  const authProvider = new GpApiAuthProvider();
-  const apiClient = new HttpGpApiClient(authProvider);
-  const engine = new CertificationEngine(config, apiClient);
-
-  const result = await engine.run({ timeout: 300000 });
-  console.log('Pass:', result.summary.passed, 'Fail:', result.summary.failed);
-}
-
-runCertification().catch(console.error);
-```
-
-See `src/` for full type definitions.
+The current build bundles the command-line entry point only; it does not produce
+the module entry point or subpath modules needed for a published programmatic API.
+For automation, invoke the CLI with `--json` and consume its envelope and exit code.
 
 ## Testing
 

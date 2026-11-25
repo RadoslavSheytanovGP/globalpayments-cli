@@ -18,6 +18,7 @@ import { registerSandboxCommands } from './commands/sandbox.js';
 import { registerLogsCommand } from './commands/logs.js';
 import { registerWebhookCommands } from './commands/webhooks.js';
 import { registerAgentCommands } from './commands/agent.js';
+import { registerQuickStartCommand } from './commands/quick-start.js';
 
 /**
  * Assemble the CLI.
@@ -38,6 +39,7 @@ export function buildCli(): Command {
 
   // Orient
   registerExplainCommand(program);
+  registerQuickStartCommand(program);
   registerInitCommand(program);
   registerDoctorCommand(program);
   registerAuthCommands(program);

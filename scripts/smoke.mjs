@@ -88,6 +88,10 @@ check(
 const packIds = (packs?.data?.packs ?? []).map((pack) => pack.packId);
 check('packs list: includes global-core', packIds.includes('global-core'), packIds.join(', '));
 
+const quickStart = invokeJson(['quick-start'], 'quick-start');
+check('quick-start: succeeds offline', quickStart?.ok === true);
+check('quick-start: returns tutorial steps', Array.isArray(quickStart?.data?.steps) && quickStart.data.steps.length > 0);
+
 // --- cases: addresses are canonical and never double-namespaced ------------
 const cases = invokeJson(['cases', 'list', '--cert', 'global-core'], 'cases list');
 check('cases list: succeeds', cases?.ok === true);
