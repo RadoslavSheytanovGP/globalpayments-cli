@@ -93,6 +93,39 @@ describe('sandbox environment setup', () => {
     }
   }, 15_000);
 
+  it('refuses a pasted credential with a space in it instead of saving it', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'gp-sandbox-space-'));
+    try {
+      const preloader = path.join(root, 'tty.cjs');
+      await writeFile(preloader, `
+        Object.defineProperty(process.stdin, 'isTTY', { value: true });
+        process.stdin.setRawMode = function (value) { this.isRaw = value; return this; };
+      `);
+      const env = { ...process.env };
+      for (const key of Object.keys(env)) {
+        if (key.startsWith('GP_API_')) delete env[key];
+      }
+      const tsx = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href;
+      const child = spawn(process.execPath, [
+        '--require', preloader, '--import', tsx, path.resolve('src', 'bin.ts'), 'sandbox', 'create'
+      ], { cwd: root, env });
+      let output = '';
+      child.stdout.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+        if (output.includes('GP API app ID:')) child.stdin.write('test-app-id # gitleaks:allow\n');
+      });
+      child.stderr.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+      });
+      const exit = await new Promise<number | null>((resolve) => child.once('close', resolve));
+      expect(exit).toBe(2);
+      expect(output).toContain('GP_API_APP_ID contains a space');
+      await expect(readFile(path.join(root, '.env'), 'utf8')).rejects.toThrow();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   it('does not save production credentials from the environment as sandbox credentials', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'gp-sandbox-prod-'));
     try {

@@ -172,6 +172,13 @@ async function resolveCredential(
   if (!value) {
     throw new GlobalPaymentsError(ERROR_CODES.E_USAGE, `${name} cannot be empty.`);
   }
+  // A pasted line with a trailing comment or a second value saves fine and then
+  // fails every request with a 403, so stop it here.
+  if (/\s/.test(value)) {
+    throw new GlobalPaymentsError(ERROR_CODES.E_USAGE, `${name} contains a space, and GP app credentials never do.`, {
+      remediation: 'Paste only the value from your app in the Developer Portal, without quotes or comments, and run sandbox create again.'
+    });
+  }
   return value;
 }
 
