@@ -25,7 +25,7 @@ afterEach(() => {
   resetUi();
 });
 
-function harness(options: { status?: ShellStatus; results?: RunResult[] } = {}) {
+function harness(options: { status?: ShellStatus; results?: RunResult[]; columns?: number; rows?: number } = {}) {
   const runs: string[][] = [];
   const results = [...(options.results ?? [])];
   const chunks: string[] = [];
@@ -33,7 +33,7 @@ function harness(options: { status?: ShellStatus; results?: RunResult[] } = {}) 
     program: buildCli(),
     version: '9.9.9',
     input: Object.assign(Readable.from([]), { isTTY: false }) as unknown as ShellDependencies['input'],
-    output: { write: (chunk: string) => chunks.push(chunk), isTTY: false, columns: 100, rows: 40 },
+    output: { write: (chunk: string) => chunks.push(chunk), isTTY: false, columns: options.columns ?? 100, rows: options.rows ?? 40 },
     run: async (args) => {
       runs.push(args);
       return results.shift() ?? { code: 0, signal: null };
@@ -149,6 +149,58 @@ describe('shell screens', () => {
     empty.shell.welcome();
     expect(empty.output()).toContain('[no credentials]');
     expect(empty.output()).toContain('/sandbox create');
+  });
+
+  it('opens with the plain ASCII banner when it fits, and the one-line lockup when it does not', async () => {
+    for (const level of [0, 3] as const) {
+      configureUi({ level, unicode: true, env: { GP_CLI_CONFIG_DIR: dir } });
+      const wide = harness({ columns: 100 });
+      await wide.shell.refreshStatus();
+      wide.shell.welcome();
+      expect(wide.output()).toContain('|___/  DEVELOPER CLI');
+      expect(wide.output()).not.toMatch(/^ g /m);
+
+      const narrow = harness({ columns: 70 });
+      await narrow.shell.refreshStatus();
+      narrow.shell.welcome();
+      expect(narrow.output()).not.toContain('DEVELOPER CLI');
+      expect(narrow.output()).toMatch(/global ?payments/);
+
+      const short = harness({ columns: 120, rows: 12 });
+      await short.shell.refreshStatus();
+      short.shell.welcome();
+      expect(short.output()).not.toContain('DEVELOPER CLI');
+    }
+  });
+
+  it('keeps the welcome and /help inside narrow terminals', async () => {
+    const statuses: ShellStatus[] = [
+      { hasKey: true, source: '.env', environment: 'sandbox', appId: 'UJqP…GRV', envFile: '.env' },
+      { hasKey: false, source: 'environment', environment: 'sandbox', appId: 'UJqP…GRV' },
+      { hasKey: true, source: 'environment', environment: 'production', appId: 'live…123' },
+      { hasKey: false, source: 'none' },
+      { hasKey: false, source: 'none', problem: 'globalpayments.config.json at /Users/someone/projects/a-very-long-folder-name/globalpayments.config.json is not valid JSON' }
+    ];
+    for (const columns of [30, 40, 50, 60, 77, 78, 80, 100]) {
+      for (const status of statuses) {
+        const { shell, output } = harness({ status, columns });
+        await shell.refreshStatus();
+        shell.welcome();
+        await shell.dispatch('/help');
+        for (const line of output().split('\n')) {
+          expect(line.length, `${columns} columns, ${status.source}: ${line}`).toBeLessThanOrEqual(columns);
+        }
+      }
+    }
+    const { shell, output } = harness({ status: { hasKey: false, source: 'none' }, columns: 40 });
+    await shell.refreshStatus();
+    shell.welcome();
+    await shell.dispatch('/help');
+    const text = output().replace(/\s+/g, ' ');
+    expect(text).toContain('No GP API credentials found in the environment, .env or project config.');
+    expect(text).toContain('Connect a sandbox app with /sandbox create, or take the tour with /quick-start.');
+    expect(text).toContain('/transactions testpay');
+    expect(text).toContain('Commands run the same with or without the slash, and /help <command> shows its flags.');
   });
 
   it('runs every piped line and fails with the first failure, typos included', async () => {

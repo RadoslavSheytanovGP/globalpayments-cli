@@ -5,6 +5,7 @@ import { painter, rgbToAnsi256 } from '../src/ui/color.js';
 import { configureUi, resetUi, resolveThemeName, statusMark, sym, t } from '../src/ui/index.js';
 import { BRAND, THEMES, THEME_NAMES } from '../src/ui/theme.js';
 import { humanCommand, highlightJson, inlineCode, pruneEmpty } from '../src/ui/text.js';
+import { flow, styledWords } from '../src/ui/layout.js';
 
 afterEach(() => resetUi());
 
@@ -180,5 +181,31 @@ describe('text helpers', () => {
     expect(removed).toBe(4);
     expect(pruneEmpty({ a: '' }).value).toEqual({});
     expect(pruneEmpty([]).value).toEqual([]);
+  });
+});
+
+describe('flow', () => {
+  it('wraps styled tokens between tokens and never past the width', () => {
+    configureUi({ level: 3, unicode: true });
+    const tokens = [...styledWords('Connect a sandbox app with', t.muted), t.command('/sandbox create'), ...styledWords('or take the tour', t.muted)];
+    for (let width = 1; width <= 80; width += 1) {
+      for (const line of flow(tokens, width)) expect(stringWidth(line), `width=${width}`).toBeLessThanOrEqual(width);
+    }
+    const lines = flow(tokens, 30).map(stripAnsi);
+    expect(lines).toEqual(['Connect a sandbox app with', '/sandbox create or take the', 'tour']);
+    // Every line opens and closes its own colour, so nothing bleeds into the next.
+    for (const line of flow(tokens, 30)) expect(line.endsWith('\x1B[39m')).toBe(true);
+  });
+
+  it('keeps a multi-word token whole, and cuts one wider than the line', () => {
+    expect(flow(['a', '/sandbox create', 'b'], 16)).toEqual(['a', '/sandbox create', 'b']);
+    expect(flow(['averyveryverylongword'], 10)).toEqual(['averyvery…']);
+    expect(flow(['', 'x', ''], 10)).toEqual(['x']);
+    expect(flow([], 10)).toEqual([]);
+  });
+
+  it('splits words on any run of spaces', () => {
+    expect(styledWords('  one  two ')).toEqual(['one', 'two']);
+    expect(styledWords('a b', (w) => `<${w}>`)).toEqual(['<a>', '<b>']);
   });
 });

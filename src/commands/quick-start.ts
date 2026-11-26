@@ -4,6 +4,8 @@ import { Command } from 'commander';
 import { renderBanner } from '../ui/brand.js';
 import { t } from '../ui/index.js';
 import { terminalColumns, terminalRows } from '../ui/capabilities.js';
+import { hang } from '../ui/text.js';
+import { wrapText } from '../ui/ansi.js';
 import { loadEnvFile } from '../config/env.js';
 import { loadObserverConfig } from '../config/load.js';
 import { runCommand } from '../contract/emit.js';
@@ -74,7 +76,11 @@ async function askYesNo(question: string): Promise<boolean> {
   prompt.once('close', () => controller.abort());
   try {
     while (true) {
-      const answer = (await prompt.question(`${question} [y/N] `, { signal: controller.signal })).trim().toLowerCase();
+      // Wrap the question but leave room on its last line for the answer.
+      const indent = question.length - question.trimStart().length;
+      const lines = wrapText(`${question.trimStart()} [y/N]`, Math.max(20, terminalColumns() - indent - 5));
+      const text = `${lines.map((line) => `${' '.repeat(indent)}${line}`).join('\n')} `;
+      const answer = (await prompt.question(text, { signal: controller.signal })).trim().toLowerCase();
       if (answer === '' || answer === 'n' || answer === 'no') return false;
       if (answer === 'y' || answer === 'yes') return true;
       process.stdout.write('Please enter y or n.\n');
@@ -138,13 +144,13 @@ export async function runTutorial(deps: TutorialDependencies): Promise<number> {
 
   say('');
   for (const line of renderBanner({ mode: 'full', columns: terminalColumns(), rows: terminalRows(), indent: 1 })) say(line);
-  say('\nWelcome! This tutorial is optional and uses sandbox only. No payments are sent automatically.\n');
+  say(`\n${hang('Welcome! This tutorial is optional and uses sandbox only. No payments are sent automatically.', 0)}\n`);
 
   for (const [index, step] of steps.entries()) {
-    say(`${t.accent(`${index + 1}.`)} ${t.heading(step.title)}\n   ${step.explanation}`);
+    say(`${t.accent(`${index + 1}.`)} ${t.heading(step.title)}\n   ${hang(step.explanation, 3)}`);
     if (step.command) say(`   ${t.muted('$')} ${t.command(step.command)}`);
     if (step.id === 'sandbox') {
-      say('   Setup writes credentials to .env and may update .gitignore. Do not use production credentials.');
+      say(`   ${hang('Setup writes credentials to .env and may update .gitignore. Do not use production credentials.', 3)}`);
       if (await confirm('   Set up existing sandbox app credentials now?')) await execute(['sandbox', 'create'], false);
     } else if (step.id === 'doctor') {
       if (await confirm('   Check sandbox credentials and connectivity now?')) await execute(['doctor'], true);
@@ -153,10 +159,10 @@ export async function runTutorial(deps: TutorialDependencies): Promise<number> {
     } else if (step.id === 'transactions') {
       if (await confirm('   Read up to five sandbox transactions now?')) await execute(['api', 'get', '/transactions?page_size=5'], true);
     } else if (step.id === 'watch') {
-      say('   Watch polls for up to five minutes, stops when required cases pass, and writes a local result.');
+      say(`   ${hang('Watch polls for up to five minutes, stops when required cases pass, and writes a local result.', 3)}`);
       if (await confirm('   Start the sandbox observer now?')) {
         watchExit = await execute(['watch', '--cert', 'global-core', '--timeout', '5m'], true);
-        if (watchExit === 1) say('   The observer finished without a passing required case. Use diagnose to inspect the saved result.');
+        if (watchExit === 1) say(`   ${hang('The observer finished without a passing required case. Use diagnose to inspect the saved result.', 3)}`);
       }
     }
     say('');

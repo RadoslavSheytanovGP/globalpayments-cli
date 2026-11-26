@@ -85,3 +85,31 @@ export function panel(lines: string[], options: { title?: string; width?: number
 export function rule(width: number): string {
   return t.muted(sym().rule.repeat(Math.max(0, width)));
 }
+
+/**
+ * Lay out pre-styled tokens as running text, wrapping between tokens so no
+ * colour run is cut and nothing goes past `width`. A token wider than the line
+ * gets a line of its own and is cut to fit.
+ */
+export function flow(tokens: string[], width: number): string[] {
+  const limit = Math.max(1, width);
+  const lines: string[] = [];
+  let line = '';
+  for (const raw of tokens) {
+    if (!raw) continue;
+    const token = truncate(raw, limit);
+    if (line && stringWidth(line) + 1 + stringWidth(token) > limit) {
+      lines.push(line);
+      line = token;
+    } else {
+      line = line ? `${line} ${token}` : token;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/** Split plain text into words, each painted on its own so it can wrap anywhere. */
+export function styledWords(text: string, paint: (word: string) => string = (word) => word): string[] {
+  return text.split(/ +/).filter(Boolean).map(paint);
+}

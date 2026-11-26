@@ -53,8 +53,13 @@ export function renderErrorText(error: GlobalPaymentsError, stderr: NodeJS.Writa
 
 function renderNextActionsText(actions: NextAction[], stdout: NodeJS.WritableStream): void {
   write(stdout, `\n${t.heading('Next')}\n`);
+  const tty = stdout as { isTTY?: boolean; columns?: number };
   for (const action of actions) {
-    write(stdout, `  ${t.accent(sym().info)} ${t.command(humanCommand(action.command))}\n    ${t.muted(action.reason)}\n`);
+    const reason = hang(action.reason, 4, tty)
+      .split('\n')
+      .map((line) => t.muted(line))
+      .join('\n');
+    write(stdout, `  ${t.accent(sym().info)} ${t.command(humanCommand(action.command))}\n    ${reason}\n`);
   }
 }
 

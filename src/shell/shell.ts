@@ -3,12 +3,12 @@ import { createInterface } from 'node:readline';
 import path from 'node:path';
 import type { Command } from 'commander';
 import { EXIT_CODES, exitCodeName } from '../contract/exit-codes.js';
-import { stringWidth, wrapText } from '../ui/ansi.js';
+import { stringWidth, truncate, wrapText } from '../ui/ansi.js';
 import { terminalColumns, terminalRows } from '../ui/capabilities.js';
 import { DOCS_URL, environmentBadge, lockup, renderBanner, type BannerMode } from '../ui/brand.js';
 import { groupedLeaves, summaryFor } from '../ui/help.js';
 import { activeTheme, reloadUi, statusMark, sym, t, uiSettings } from '../ui/index.js';
-import { columns, keyValues } from '../ui/layout.js';
+import { columns, flow, keyValues, styledWords } from '../ui/layout.js';
 import { renderThemePreview } from '../ui/preview.js';
 import { configDir, saveSettings } from '../ui/settings.js';
 import { isThemeName } from '../ui/theme.js';
@@ -211,7 +211,7 @@ export class Shell {
       for (const line of wrapText(tagline, width - 2)) this.write(` ${t.muted(line)}`);
     }
     this.write();
-    for (const line of this.statusLines()) this.write(` ${line}`);
+    for (const tokens of this.statusLines()) for (const line of flow(tokens, width - 2)) this.write(` ${line}`);
     this.write();
     const starters: Array<[string, string]> = [
       ['/quick-start', 'guided tour'],
@@ -241,32 +241,58 @@ export class Shell {
     this.write();
   }
 
-  private statusLines(): string[] {
+  /** The credential status under the banner, as token lists so they wrap cleanly. */
+  private statusLines(): string[][] {
     const status = this.status;
     const s = sym();
+    const muted = (text: string): string[] => styledWords(text, t.muted);
     if (status.problem) {
       return [
-        `${environmentBadge('none')} ${t.warning('Configuration problem:')} ${status.problem}`,
-        `${t.muted('Run')} ${t.command('/doctor')} ${t.muted('for the details.')}`
+        [environmentBadge('none'), ...styledWords('Configuration problem:', t.warning), ...styledWords(status.problem)],
+        [...muted('Run'), t.command('/doctor'), ...muted('for the details.')]
       ];
     }
     if (status.source === 'none') {
       return [
-        `${environmentBadge('none')} ${t.muted('No GP API credentials found in the environment, .env or project config.')}`,
-        `${t.muted('Connect a sandbox app with')} ${t.command('/sandbox create')}${t.muted(', or take the tour with')} ${t.command('/quick-start')}${t.muted('.')}`
+        [environmentBadge('none'), ...muted('No GP API credentials found in the environment, .env or project config.')],
+        [...muted('Connect a sandbox app with'), `${t.command('/sandbox create')}${t.muted(',')}`, ...muted('or take the tour with'), `${t.command('/quick-start')}${t.muted('.')}`]
       ];
     }
     const kind = status.environment === 'production' ? 'production' : 'sandbox';
     const from = status.source === 'config' ? (status.configPath ?? 'config') : status.source === '.env' ? '.env' : 'environment';
     const lines = [
-      `${environmentBadge(kind)} ${t.muted('app')} ${status.appId ?? '?'} ${t.muted(`${s.dot} from ${from}`)}${
-        status.hasKey ? '' : ` ${t.warning(`${s.dot} app key missing`)}`
-      }`
+      [
+        environmentBadge(kind),
+        t.muted('app'),
+        status.appId ?? '?',
+        ...muted(`${s.dot} from`),
+        t.muted(from),
+        ...(status.hasKey ? [] : styledWords(`${s.dot} app key missing`, t.warning))
+      ]
     ];
     if (kind === 'production') {
-      lines.push(
-        `${statusMark('warn')} ${t.warning('Production credentials.')} ${t.muted('Reads return live data; api post and testpay refuse to run.')}`
-      );
+      lines.push([statusMark('warn'), ...styledWords('Production credentials.', t.warning), ...muted('Reads return live data; api post and testpay refuse to run.')]);
+    }
+    return lines;
+  }
+
+  /**
+   * Name and description pairs for /help: side by side when the description
+   * still gets a readable column, otherwise the name on its own line with the
+   * description wrapped under it, so nothing runs off a narrow terminal.
+   */
+  private entries(rows: Array<[string, string]>, nameWidth: number): string[] {
+    const width = this.columns();
+    const indent = 3;
+    const gap = 2;
+    if (width - indent - nameWidth - gap >= 24) {
+      const pad = (text: string): string => text + ' '.repeat(Math.max(0, nameWidth - stringWidth(text)));
+      return columns(rows.map(([name, text]) => [t.accent(pad(name)), text]), { width, gap, indent, wrap: true });
+    }
+    const lines: string[] = [];
+    for (const [name, text] of rows) {
+      lines.push(`${' '.repeat(indent)}${t.accent(truncate(name, width - indent))}`);
+      for (const line of wrapText(text, width - indent - 2)) lines.push(`${' '.repeat(indent + 2)}${line}`);
     }
     return lines;
   }
@@ -281,29 +307,22 @@ export class Shell {
       30,
       Math.max(...groups.flatMap((g) => g.leaves.map((leaf) => stringWidth(leaf.term) + 1)), ...BUILTINS.map((b) => b.name.length + (b.args ? b.args.length + 2 : 1)))
     );
-    const pad = (text: string): string => text + ' '.repeat(Math.max(0, termWidth - stringWidth(text)));
     this.write();
     for (const group of groups) {
       this.write(` ${t.heading(group.title)}`);
-      for (const line of columns(
-        group.leaves.map((leaf) => [t.accent(pad(`/${leaf.term}`)), summaryFor(leaf.path, leaf.description)]),
-        { width, gap: 2, indent: 3 }
-      )) {
+      for (const line of this.entries(group.leaves.map((leaf) => [`/${leaf.term}`, summaryFor(leaf.path, leaf.description)]), termWidth)) {
         this.write(line);
       }
       this.write();
     }
     this.write(` ${t.heading('Shell')}`);
-    for (const line of columns(
-      BUILTINS.map((b) => [t.accent(pad(`/${b.name}${b.args ? ` ${b.args}` : ''}`)), b.description]),
-      { width, gap: 2, indent: 3 }
-    )) {
+    for (const line of this.entries(BUILTINS.map((b) => [`/${b.name}${b.args ? ` ${b.args}` : ''}`, b.description]), termWidth)) {
       this.write(line);
     }
     this.write();
     const s = sym();
     this.write(` ${t.heading('Keys')}`);
-    for (const line of columns(
+    for (const line of this.entries(
       [
         ['Tab', 'Complete commands, flags, pack ids, case addresses and files'],
         [s.upDown, 'Move through the palette, or through history (filtered by what you typed)'],
@@ -314,13 +333,15 @@ export class Shell {
         ['Ctrl+A Ctrl+E', 'Start or end of line'],
         ['Ctrl+W Ctrl+U', 'Delete a word, or the whole line before the cursor'],
         ['Ctrl+D', 'Leave the shell']
-      ].map(([key, text]) => [t.accent(pad(key!)), text!]),
-      { width, gap: 2, indent: 3 }
+      ],
+      termWidth
     )) {
       this.write(line);
     }
     this.write();
-    this.write(` ${t.muted('Commands run the same with or without the slash, and')} ${t.command('/help <command>')} ${t.muted('shows its flags.')}`);
+    for (const line of flow([...styledWords('Commands run the same with or without the slash, and', t.muted), t.command('/help <command>'), ...styledWords('shows its flags.', t.muted)], this.columns() - 2)) {
+      this.write(` ${line}`);
+    }
     this.write();
   }
 
