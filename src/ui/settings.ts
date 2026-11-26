@@ -46,7 +46,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     key: 'banner',
     values: ['full', 'compact', 'off'],
     env: 'GP_CLI_BANNER',
-    description: 'Wordmark shown when the shell starts.'
+    description: 'Banner shown when the shell starts: full is the ASCII art, compact one line.'
   },
   {
     key: 'icons',

@@ -22,6 +22,23 @@ describe('quick-start tutorial', () => {
     expect(text).toContain('globalpayments diagnose');
   });
 
+  it('opens with the plain ASCII banner, uncoloured', async () => {
+    const saved = { columns: process.stdout.columns, rows: process.stdout.rows };
+    Object.defineProperty(process.stdout, 'columns', { value: 100, configurable: true, writable: true });
+    Object.defineProperty(process.stdout, 'rows', { value: 40, configurable: true, writable: true });
+    try {
+      const lines: string[] = [];
+      await runTutorial({ say: (line) => lines.push(line), confirm: async () => false, run: vi.fn(), checkSandbox: vi.fn() });
+      const tagline = lines.findIndex((line) => line.includes('DEVELOPER CLI'));
+      expect(lines[0]).toBe('');
+      expect(tagline).toBe(6);
+      for (const line of lines.slice(1, tagline + 1)) expect(line).not.toContain('\x1B');
+    } finally {
+      Object.defineProperty(process.stdout, 'columns', { value: saved.columns, configurable: true, writable: true });
+      Object.defineProperty(process.stdout, 'rows', { value: saved.rows, configurable: true, writable: true });
+    }
+  });
+
   it('runs only confirmed actions and checks sandbox before network requests', async () => {
     const events: string[] = [];
     const answers = [true, true, true, true, true];

@@ -1,31 +1,15 @@
 /**
- * The Global Payments wordmark for terminals.
+ * The banner art: "Global Payments" in figlet's standard font with the product
+ * line under the tail of the y. Plain ASCII on purpose, so it reads the same in
+ * every terminal, font and Windows console, and it is never coloured.
  *
- * Traced from the official digital wordmark (global-logo-color-digital.svg, 2025
- * identity) into Unicode quadrant blocks, so the heavy "global", the light
- * "payments", the double-storey g, the Arc and the Ping all come from the real
- * outline rather than a lookalike font. Two sizes cover 100+ and 80+ column
- * terminals; anything narrower gets the one-line lockup.
+ * Regenerate with `figlet -f standard "Global Payments"` if it ever changes.
  */
-
-/** 93 columns x 7 rows. */
-export const WORDMARK_LARGE: readonly string[] = [
-  "   ▖    ▄▙                                                                                   ",
-  " ▟▛▘  ▄    █▌        ▐█             ▐█                                              ▐▌       ",
-  "▟█ ▗█▛▀▜█▖ █▌ ▄█▀▀█▙ ▐█▛▀▜█▖ ▟▛▀▀█▖ ▐█  █▞▀▀▀▙ ▐▀▀▀▜▖▜▖  ▟▘▐█▀▀▜▄▀▀▀▙ ▗▛▀▀▜▄ █▛▀▀▜▖▝▜▛▘ █▀▀▀▌",
-  "█▌ ▐█▌ ▗█▌ █▌▐█▌  ▐█▌▐█   ██ ▄█▀▀█▌ ▐█  █    █ ▄▞▀▀▜▌ █ ▐▌ ▐▌   █   █ █▀▀▀▀▀ █   ▐▌ ▐▌  ▀▀▘▄▄",
-  "▐█▖ █▛▀▀▀  █▌ ▀█▄▄█▀ ▐█▚▄▟█▘▝█▙▄▟██ ▐█  █▚▄▄▄▀ ▜▄▄▄▜▙ ▝▙▛  ▐▌   █   █ ▝▙▄▄▟▀ █   ▐▌ ▐▙▖▝▜▄▄▄▛",
-  " ▀▘▗█▀▀▀▜▙                              █             ▗▛                                     ",
-  "   ▀▜▙▄▄█▀                              ▀            ▀▀                                      ",
+export const WORDMARK: readonly string[] = [
+  '  ____ _       _           _   ____                                  _',
+  ' / ___| | ___ | |__   __ _| | |  _ \\ __ _ _   _ _ __ ___   ___ _ __ | |_ ___',
+  "| |  _| |/ _ \\| '_ \\ / _` | | | |_) / _` | | | | '_ ` _ \\ / _ \\ '_ \\| __/ __|",
+  '| |_| | | (_) | |_) | (_| | | |  __/ (_| | |_| | | | | | |  __/ | | | |_\\__ \\',
+  ' \\____|_|\\___/|_.__/ \\__,_|_| |_|   \\__,_|\\__, |_| |_| |_|\\___|_| |_|\\__|___/',
+  '                                          |___/  DEVELOPER CLI'
 ];
-
-/** 74 columns x 6 rows. */
-export const WORDMARK_MEDIUM: readonly string[] = [
-  "  ▄   ▗▙ ▄       ▄          ▗▄                                            ",
-  "▗█▘▗▄▄▄ ▐█  ▄▄▖  █▖▄▄   ▄▄▖ ▐█  ▖▗▄▖  ▗▄▄ ▗   ▖▗ ▄▖ ▄▄   ▄▄▖ ▗▗▄▄ ▗█▄ ▗▄▄ ",
-  "█▌ █▘ ▜▌▐█ █▀ ▜▙ █▛ ▜█ ▀▙▄█▖▐█  █▘ ▝▙ ▘  ▙▝▌ ▟▘▐▌ ▝▛  █ █▄▄▟▌▐▘ ▝▙ █  ▙▖ ▀",
-  "▜▌ ▜▙▄█▘▐█ █▄ ▟▛ █▙ ▟▛▗█▘▗█▌▐█  █▖ ▗▛▐▌ ▗█ ▐▄▌ ▐   ▌  █ ▙  ▗▖▐   █ █  ▄  █",
-  "▝▀ █▙▄▄▄ ▀  ▝▀▘  ▀ ▀▀  ▝▀▘▝▘▝▀  █▝▀▘  ▝▀▘▝▘ ▛  ▝   ▘  ▝  ▀▀▘ ▝   ▘ ▝▀  ▀▀ ",
-  "  ▝▜▄▄▟▀                        ▀          ▀                              ",
-];
-

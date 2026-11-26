@@ -28,7 +28,7 @@ export const BUILTINS: BuiltinCommand[] = [
     description: 'Preview the colour themes, or switch to one',
     values: () => ['auto', ...THEME_NAMES]
   },
-  { name: 'banner', args: '[full|compact|off]', description: 'Choose the wordmark shown at start', values: () => ['full', 'compact', 'off'] },
+  { name: 'banner', args: '[full|compact|off]', description: 'Choose the banner shown at start', values: () => ['full', 'compact', 'off'] },
   { name: 'env', description: 'Show the environment and credentials in use' },
   { name: 'history', description: 'Show recent commands' },
   { name: 'docs', description: 'Developer portal and API reference links' },

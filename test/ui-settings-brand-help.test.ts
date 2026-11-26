@@ -10,7 +10,7 @@ import { COMMAND_GROUPS, EXAMPLES, SUMMARIES, formatCommanderError, groupedLeave
 import { configureUi, resetUi } from '../src/ui/index.js';
 import { configDir, loadSettings, saveSettings, settingsPath } from '../src/ui/settings.js';
 import { tokenize } from '../src/shell/tokenize.js';
-import { WORDMARK_LARGE, WORDMARK_MEDIUM } from '../src/ui/wordmark.js';
+import { WORDMARK } from '../src/ui/wordmark.js';
 
 let dir: string;
 let env: NodeJS.ProcessEnv;
@@ -72,36 +72,62 @@ describe('settings', () => {
 });
 
 describe('brand', () => {
-  it('keeps every row of each wordmark the same width', () => {
-    for (const art of [WORDMARK_LARGE, WORDMARK_MEDIUM]) {
-      const widths = new Set(art.map((line) => stringWidth(line)));
-      expect(widths.size).toBe(1);
+  it('is plain printable ASCII with no trailing spaces', () => {
+    for (const line of WORDMARK) {
+      expect(line).toMatch(/^[\x20-\x7E]+$/);
+      expect(line).toBe(line.trimEnd());
     }
+    expect(WORDMARK.at(-1)).toContain('DEVELOPER CLI');
   });
 
-  it('picks the largest wordmark that fits and never overflows', () => {
+  it('is the figlet standard rendering of Global Payments', () => {
+    // Pinned against `figlet -f standard "Global Payments"`, plus the product line.
+    expect(WORDMARK.slice(0, 5).join('\n')).toBe(
+      [
+        '  ____ _       _           _   ____                                  _',
+        ' / ___| | ___ | |__   __ _| | |  _ \\ __ _ _   _ _ __ ___   ___ _ __ | |_ ___',
+        "| |  _| |/ _ \\| '_ \\ / _` | | | |_) / _` | | | | '_ ` _ \\ / _ \\ '_ \\| __/ __|",
+        '| |_| | | (_) | |_) | (_| | | |  __/ (_| | |_| | | | | | |  __/ | | | |_\\__ \\',
+        ' \\____|_|\\___/|_.__/ \\__,_|_| |_|   \\__,_|\\__, |_| |_| |_|\\___|_| |_|\\__|___/'
+      ].join('\n')
+    );
+    // The tail of the y sits right under the start of its bowl.
+    expect(WORDMARK[5]!.indexOf('|___/')).toBe(WORDMARK[4]!.indexOf('\\__, |'));
+  });
+
+  it('shows the wordmark when it fits and never overflows', () => {
     configureUi({ level: 3, unicode: true });
-    expect(chooseWordmark(120, 40)).toBe(WORDMARK_LARGE);
-    expect(chooseWordmark(79, 40)).toBe(WORDMARK_MEDIUM);
-    expect(chooseWordmark(60, 40)).toBeUndefined();
-    expect(chooseWordmark(120, 12)).toBeUndefined();
+    const width = Math.max(...WORDMARK.map((line) => line.length));
+    expect(chooseWordmark(width, 40)).toBe(WORDMARK);
+    expect(chooseWordmark(width - 1, 40)).toBeUndefined();
+    expect(chooseWordmark(200, 15)).toBeUndefined();
+    expect(chooseWordmark(200, 16)).toBe(WORDMARK);
     for (let columns = 20; columns <= 200; columns += 1) {
       for (const line of renderBanner({ mode: 'full', columns, rows: 40, indent: 1 })) {
         expect(stringWidth(line), `columns=${columns}`).toBeLessThanOrEqual(columns);
       }
     }
-    expect(renderBanner({ mode: 'full', columns: 80, rows: 40, indent: 1 }).length).toBe(WORDMARK_MEDIUM.length + 2);
+    expect(renderBanner({ mode: 'full', columns: 80, rows: 40, indent: 1 })).toEqual(WORDMARK.map((line) => ` ${line}`));
+    expect(renderBanner({ mode: 'full', columns: 80, rows: 40, indent: 2 })[0]).toBe(`  ${WORDMARK[0]}`);
   });
 
-  it('falls back to the lockup for compact mode, ASCII consoles and no colour', () => {
+  it('never colours the wordmark, whatever the theme or console', () => {
+    for (const theme of ['gp', 'gp-light', 'classic', 'mono'] as const) {
+      for (const unicode of [true, false]) {
+        configureUi({ level: 3, unicode, theme });
+        expect(renderBanner({ mode: 'full', columns: 120, rows: 40 })).toEqual(WORDMARK.map((line) => ` ${line}`));
+      }
+    }
+  });
+
+  it('falls back to the lockup for compact mode and small terminals', () => {
     configureUi({ level: 3, unicode: true });
-    expect(renderBanner({ mode: 'compact', columns: 200, rows: 40 })).toHaveLength(1);
+    expect(renderBanner({ mode: 'compact', columns: 200, rows: 40 })).toEqual([` ${lockup()}`]);
     expect(renderBanner({ mode: 'off', columns: 200, rows: 40 })).toEqual([]);
-    configureUi({ level: 3, unicode: false });
-    expect(renderBanner({ mode: 'full', columns: 200, rows: 40 })).toHaveLength(1);
+    expect(renderBanner({ mode: 'full', columns: 60, rows: 40 })).toEqual([` ${lockup()}`]);
+    expect(renderBanner({ mode: 'full', columns: 200, rows: 10 })).toEqual([` ${lockup()}`]);
     configureUi({ level: 0, unicode: true });
-    const plain = renderBanner({ mode: 'full', columns: 200, rows: 40 });
-    expect(plain.join('')).not.toContain('\x1B');
+    expect(renderBanner({ mode: 'full', columns: 200, rows: 40 }).join('')).not.toContain('\x1B');
     expect(lockup()).toBe('global payments');
     expect(environmentBadge('production')).toBe('[PRODUCTION]');
     expect(environmentBadge('none')).toBe('[no credentials]');

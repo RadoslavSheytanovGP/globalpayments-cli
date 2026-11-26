@@ -25,7 +25,7 @@ Certification commands poll recent transactions and actions, match them against 
 
 Run `globalpayments` on its own in a terminal and you get a shell where every command is a slash command.
 
-![The globalpayments shell: wordmark, sandbox badge, live command palette and completion](docs/images/shell.gif)
+![The globalpayments shell: ASCII banner, sandbox badge, live command palette and completion](docs/images/shell.gif)
 
 Type `/` to see everything, keep typing to filter, and press Enter to run the highlighted command, so `/doc` and Enter runs `/doctor`. Tab completes commands, flags and values: pack ids after `--cert`, case addresses after `cases show` and `diagnose`, webhook events after `trigger`, and matching files after `--env-file`, `--config` and `--data-file`. The up arrow goes back through history, filtered by whatever you already typed, and a grey suggestion from history can be taken with the right arrow. The badge in the prompt says whether requests go to sandbox or production, and switches the moment `/sandbox create` writes new credentials.
 
@@ -35,7 +35,7 @@ Every command runs exactly the way it does outside the shell, with the same flag
 | --- | --- |
 | `/help [command]` | Every command grouped by task, or the help for one |
 | `/theme [name]` | Preview the colour themes, or switch to one |
-| `/banner full\|compact\|off` | Choose the wordmark shown at start |
+| `/banner full\|compact\|off` | Choose the banner shown at start (the ASCII art, one line, or nothing) |
 | `/env` | Where requests go and where the credentials came from (the key is never shown) |
 | `/history` | Recent commands |
 | `/docs` | Developer portal and API reference links |
@@ -62,7 +62,7 @@ printf '/doctor\n/packs list\n' | globalpayments shell
 
 ### Make it yours
 
-The default theme uses the Global Payments brand colours: the wordmark and the sandbox badge are white on Global Blue, accents are Pulse Blue, warnings are Creamsicle and only failures are Raspberry. A passing check is a blue tick because the brand has no green and leads positive results with blue. The `classic` theme uses your terminal's own palette if you want green and red back.
+The banner at the top is plain ASCII in your terminal's own text colour, whatever the theme. Everything under it uses the Global Payments brand colours by default: the sandbox badge is white on Global Blue, accents are Pulse Blue, warnings are Creamsicle and only failures are Raspberry. A passing check is a blue tick because the brand has no green and leads positive results with blue. The `classic` theme uses your terminal's own palette if you want green and red back.
 
 ```bash
 globalpayments ui themes                # preview every theme in your terminal

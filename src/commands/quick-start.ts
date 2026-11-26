@@ -136,6 +136,7 @@ export async function runTutorial(deps: TutorialDependencies): Promise<number> {
     return exit;
   }
 
+  say('');
   for (const line of renderBanner({ mode: 'full', columns: terminalColumns(), rows: terminalRows(), indent: 1 })) say(line);
   say('\nWelcome! This tutorial is optional and uses sandbox only. No payments are sent automatically.\n');
 

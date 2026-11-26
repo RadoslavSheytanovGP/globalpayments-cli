@@ -4,9 +4,9 @@ import type { ColorSpec, TextStyle } from './color.js';
  * Global Payments brand palette (2025 identity, gpbrandguide.com).
  *
  * How the guide maps onto a terminal:
- * - White and Global Blue are the primary identifiers, so the wordmark and the
- *   environment badges are white on a Global Blue field, the guide's primary
- *   logo treatment. Global Blue as *text* only works on light backgrounds, so
+ * - White and Global Blue are the primary identifiers, so the 'g' chip in the
+ *   lockup and the environment badges are white on a Global Blue field, the
+ *   guide's primary logo treatment. The ASCII banner stays uncoloured. Global Blue as *text* only works on light backgrounds, so
  *   dark terminals carry accents in Pulse Blue, the guide's connector colour.
  * - The guide defines no green and leads positive data with blue, so a passing
  *   check is a blue tick. Raspberry is reserved for negatives (failures only),
@@ -69,7 +69,7 @@ export interface Theme {
     command: TextStyle;
     /** Hyperlink text. */
     link: TextStyle;
-    /** The wordmark field. */
+    /** The 'g' chip in the one-line lockup. */
     logo: TextStyle;
     /** Environment badges. */
     badgeSandbox: TextStyle;
